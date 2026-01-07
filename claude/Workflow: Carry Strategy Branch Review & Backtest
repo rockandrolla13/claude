@@ -1,0 +1,293 @@
+# Workflow: Carry Strategy Branch Review & Backtest
+
+## Overview
+
+You have:
+1. A git branch with carry strategy code
+2. An existing `.md` file (documentation or notes)
+3. Goal: Review the code, run backtests, create a reusable skill
+
+---
+
+## Step 1: Access the Branch
+
+### Option A: Checkout the Branch
+```bash
+cd /path/to/repo
+git checkout feature/carry-strategy
+claude
+```
+
+### Option B: Git Worktree (keeps main branch intact)
+```bash
+# Create isolated worktree for the carry branch
+git worktree add ../repo-carry-backtest feature/carry-strategy
+
+# Run Claude Code in the worktree
+cd ../repo-carry-backtest
+claude
+```
+
+Worktrees are ideal here — you can run backtests without polluting your main working directory.
+
+---
+
+## Step 2: Initial Exploration (Plan Mode)
+
+Start Claude in **plan mode** for read-only exploration:
+
+```
+claude
+> /plan
+> Read the carry strategy implementation in this branch. 
+> Identify: entry/exit logic, position sizing, universe filters, and backtest configuration.
+> Don't write any code yet.
+```
+
+Or explicitly:
+
+```
+> Read src/strategies/carry.py and tests/test_carry.py. 
+> Explain the signal construction and summarise the backtest harness.
+> Do not modify anything.
+```
+
+This builds Claude's understanding before any edits.
+
+---
+
+## Step 3: Run the Backtest
+
+Once Claude understands the structure:
+
+```
+> Run the backtest for the carry strategy with default parameters.
+> Show me the Sharpe ratio, max drawdown, and turnover.
+```
+
+If there's a specific runner:
+
+```
+> Execute `python -m backtest.run --strategy carry --start 2020-01-01 --end 2024-12-31`
+> Parse the output and summarise key metrics.
+```
+
+For iterative parameter sweeps:
+
+```
+> Sweep the lookback parameter from 5 to 20 days in steps of 5.
+> Run each backtest and tabulate Sharpe, Sortino, max DD.
+```
+
+---
+
+## Step 4: Document Learnings → Skill Creation
+
+Now convert your session into a reusable skill.
+
+### 4a. Prompt Claude to Extract the Pattern
+
+Near the end of a productive session:
+
+```
+> Review what we've done in this session.
+> Extract a reusable skill for carry strategy backtesting.
+> Include: data requirements, parameter ranges, validation steps, common pitfalls.
+> Save it as a SKILL.md file.
+```
+
+### 4b. Create the Skill Directory
+
+```bash
+mkdir -p .claude/skills/carry-backtest
+```
+
+### 4c. SKILL.md Template
+
+```yaml
+---
+name: carry-backtest
+description: >
+  Backtest carry strategies on bond/credit instruments. 
+  Use when running carry signal backtests, parameter sweeps, 
+  or analysing roll-down P&L attribution.
+---
+
+# Carry Strategy Backtest
+
+## Prerequisites
+- Data: `data/yields/`, `data/prices/`
+- Python environment with `pandas`, `numpy`, `scipy`
+- Backtest harness: `src/backtest/`
+
+## Signal Construction
+1. Compute carry = (short_yield - long_yield) / duration
+2. Normalise cross-sectionally (z-score)
+3. Apply universe filters (liquidity, rating)
+
+## Backtest Workflow
+1. Load price/yield data for date range
+2. Generate carry signals with specified lookback
+3. Apply position sizing (equal risk or signal-weighted)
+4. Compute returns with transaction costs
+5. Calculate metrics: Sharpe, Sortino, max DD, turnover
+
+## Parameter Ranges
+| Parameter | Default | Sweep Range |
+|-----------|---------|-------------|
+| lookback  | 10d     | 5-20d       |
+| z_cap     | 3.0     | 2.0-4.0     |
+| tc_bps    | 5       | 2-10        |
+
+## Commands
+```bash
+# Single run
+python -m backtest.run --strategy carry --lookback 10
+
+# Parameter sweep
+python -m backtest.sweep --strategy carry --param lookback --range 5,20,5
+```
+
+## Validation Checklist
+- [ ] No look-ahead bias in signal construction
+- [ ] Transaction costs applied correctly
+- [ ] Universe filters match live constraints
+- [ ] Slippage model appropriate for instrument liquidity
+
+## Common Pitfalls
+- Using settlement dates vs trade dates inconsistently
+- Ignoring roll-down component in carry calculation
+- Overfitting to specific rate regimes
+
+## References
+See [carry-methodology.md](../../docs/carry-methodology.md) for derivation.
+See [backtest-config.md](../../docs/backtest-config.md) for harness setup.
+```
+
+---
+
+## Step 5: Integrate Your Existing .md File
+
+If you already have documentation (e.g., `docs/carry-notes.md`):
+
+### Option A: Reference It from the Skill
+
+```markdown
+## References
+For detailed methodology, see [carry-notes.md](../../docs/carry-notes.md).
+```
+
+Claude will read it when needed (progressive disclosure).
+
+### Option B: Merge Key Points into SKILL.md
+
+```
+> Read docs/carry-notes.md and extract the key operational rules.
+> Add them to the SKILL.md under a "Critical Rules" section.
+> Keep it concise — under 20 lines.
+```
+
+### Option C: Convert the .md to a Skill
+
+If the file is substantial:
+
+```bash
+mkdir -p .claude/skills/carry-methodology
+cp docs/carry-notes.md .claude/skills/carry-methodology/REFERENCE.md
+```
+
+Then create a minimal `SKILL.md`:
+
+```yaml
+---
+name: carry-methodology
+description: >
+  Carry signal methodology and derivation. 
+  Use when constructing carry signals or debugging signal calculation.
+---
+
+# Carry Methodology
+
+See [REFERENCE.md](REFERENCE.md) for full derivation.
+
+## Quick Reference
+- Carry = (short_yield - long_yield) / duration
+- Roll-down = price change from yield curve slide
+- Total carry = carry + roll-down
+```
+
+---
+
+## Step 6: CLAUDE.md Updates
+
+Add project-level context so Claude always knows about the strategy:
+
+```markdown
+# CLAUDE.md (project root)
+
+## Strategies
+- Carry strategy: `src/strategies/carry.py`
+- For backtest workflow, Claude should use the `carry-backtest` skill
+- For methodology questions, see `docs/carry-methodology.md`
+
+## Backtest Conventions
+- All dates in UTC
+- Returns are gross unless `--net` flag specified
+- Transaction costs default to 5bps
+
+## Anti-Patterns
+- Never use forward-filled prices for signal construction
+- Never compute Sharpe on < 252 days of data
+```
+
+---
+
+## Recommended Session Flow
+
+```
+1. git worktree add ../carry-backtest feature/carry-strategy
+2. cd ../carry-backtest && claude
+
+3. [Plan Mode] "Read the carry strategy code, explain the logic"
+4. [Execute] "Run the backtest, show metrics"
+5. [Iterate] "Sweep lookback 5-20, tabulate results"
+6. [Document] "Extract a skill from this session"
+
+7. mkdir -p .claude/skills/carry-backtest
+8. [Save SKILL.md]
+9. Update CLAUDE.md with strategy references
+10. git add .claude/ && git commit -m "Add carry-backtest skill"
+```
+
+---
+
+## Slash Command for Quick Access
+
+Create `.claude/commands/backtest-carry.md`:
+
+```markdown
+Run carry strategy backtest with parameters: $ARGUMENTS
+
+1. Load the carry strategy from src/strategies/carry.py
+2. Parse parameters from arguments (--lookback, --start, --end)
+3. Execute backtest
+4. Report: Sharpe, Sortino, max DD, annual turnover
+5. If --sweep flag, run parameter grid and tabulate results
+```
+
+Then use:
+```
+/project:backtest-carry --lookback 10 --start 2020-01-01 --end 2024-12-31
+```
+
+---
+
+## Summary: Skills vs CLAUDE.md for This Workflow
+
+| Content | Location | Why |
+|---------|----------|-----|
+| Code style, date conventions | `CLAUDE.md` | Always needed |
+| Strategy file locations | `CLAUDE.md` | Quick reference |
+| Backtest workflow steps | Skill | Triggered when backtesting |
+| Methodology derivation | Skill + REFERENCE.md | Loaded on demand |
+| Parameter sweep command | Slash command | Explicit invocation |

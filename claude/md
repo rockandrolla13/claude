@@ -1,0 +1,246 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Understand deeply how the directory and code works inside and out. Ask me any questions if there are things you don't understand. This will be the basis for the rest of our conversation
+## Project Overview
+
+
+## Key Commands
+
+### Installation
+```bash
+pip install -e .                    # Development install
+pip install -r requirements.txt     # Install all dependencies
+```
+
+### Running Tests
+```bash
+pytest tests/                       # Run all tests
+pytest tests/test_mfdfa_results.py  # Run single test file
+pytest -v tests/                    # Verbose output
+```
+
+### Running Analysis Scripts
+```bash
+python scripts/run_comprehensive_analysis.py     # Full analysis pipeline
+python scripts/generate_mfdfa_overview.py        # Generate overview plots
+python scripts/mmd_temporal_stability_analysis.py  # Temporal stability analysis
+```
+
+## Architecture
+
+### Core Library (`src/`)
+
+**Data Layer:**
+- `data_loader.py` - Factory pattern data loading across 5 pipeline stages (raw pickle → derived features)
+- `alignment.py` - Multi-symbol data alignment and quality analysis
+- `mfdfa_loader.py` - Load pre-computed MFDFA results
+
+**MFDFA Computation (`src/core/`):**
+- `mfdfa_computer.py` - Wrapper around fathon library for MFDFA computation
+- `mfdfa_results.py` - MFDFAScalars data structure (37 features: H(q), τ(q), f(α))
+- `mfdfa_validator.py` - Quality control (R² ≥ 0.90, min observations)
+
+**Processing (`src/processing/`):**
+- `pipeline.py` - Main orchestrator for task discovery and parallel execution
+- `parallel_executor.py` - Multiprocessing-based computation
+- `single_processor.py` - Sequential processing fallback
+
+**Analysis Modules:**
+- `clock_analysis.py` / `clock_comparison.py` - Clock type comparisons
+- `pairs_signals.py` - Pairs trading signal generation
+- `spillover.py` - Cross-asset Hurst spillover analysis
+- `tail_analysis.py` - Heavy-tail distribution analysis
+- `performance.py` / `execution_costs.py` - Trading performance attribution
+
+**Visualization (`src/visualization/`):**
+- `mfdfa_plots.py` - Publication-quality MMD heatmaps, temporal stability curves
+- `plot_config.py` - Matplotlib style configuration (300 DPI, serif fonts)
+
+### Data Flow
+
+```
+Raw Tick Data → Aligned Data → Resampled Bars (by clock) → Derived Features → MFDFA Scalars → Analysis
+```
+
+**Clock Types:**
+| Type | Examples | Description |
+|------|----------|-------------|
+| tick | tick_50, tick_100, tick_250 | Event-based (every N ticks) |
+| time | time_5S, time_10S, time_30S, time_1min | Calendar-time intervals |
+| trade | trade_1, trade_5, trade_10 | Trade-count based |
+| volume | volume_500, volume_1000, volume_2500 | Size-weighted |
+
+### Key Instruments
+- RX1: Euro Bund (government bonds)
+- OE1: Brent Crude (energy)
+- YM1: Dow Jones Mini (equity index)
+- JB1: Cocoa (agricultural commodity)
+
+### Results Structure
+```
+results/
+├── {SYMBOL}/{CLOCK}/           # Per-symbol, per-clock MFDFA results
+├── mmd_analysis/               # Clock comparison via MMD tests
+├── temporal_stability/         # Time robustness analysis
+└── execution_analysis/         # Trading performance
+```
+
+## Critical Dependencies
+
+- `fathon==1.3.3.post1` - Core MFDFA computation (requires numpy < 2.0)
+- `numpy>=1.24.4,<2.0.0` - Pre-2.0 API required by fathon
+- `scipy==1.11.4` - Statistical tests
+- `pandas==2.0.3` / `pyarrow==14.0.1` - Data handling with Parquet I/O
+
+## Statistical Methods Used
+
+- **MMD (Maximum Mean Discrepancy):** Gaussian RBF kernel with median heuristic, 2000 permutations
+- **Bootstrap CI:** BCa method, 1000 samples
+- **Multiple Testing:** Benjamini-Hochberg FDR correction
+- **MFDFA q-values:** Range -10 to +10 (21 values), polynomial order 1
+the statistical tests are /media/ak/10E1026C4FA6006E/GitRepos/interpretable-test
+/media/ak/10E1026C4FA6006E/GitRepos/kernel-cgof
+## Configuration
+
+Configuration is passed as dictionaries from `src/config/config_loader.py`. Key MFDFA parameters:
+- `polynomial_order`: Detrending order (typically 1)
+- `min_observations`: Minimum data points per window (typically 100+)
+- `min_valid_scales`: Minimum valid scales for fit (typically 10)
+
+## Plot Standards
+
+All publication plots:
+- 300 DPI resolution (PNG + PDF)
+- NO TITLES (metadata in filenames)
+- Serif fonts (Times/Palatino)
+- Clock-specific colors: tick=blue, trade=purple, time=orange, volume=green
+
+<do_not_act_before_instructions>
+Do not jump into implementation or changes files unless clearly
+instructed to make changes. When the user's intent is ambiguous,
+default to providing information, doing research, and providing
+recommendations rather than taking action. Only proceed with edits,
+modifications, or implementations when the user explicitly requests
+them.
+</do_not_act_before_instructions>
+
+<investigate_before_answering>
+Never speculate about code you have not opened. If the user
+references a specific file, you MUST read the file before
+answering. Make sure to investigate and read relevant files BEFORE
+answering questions about the codebase. Never make any claims about
+code before investigating unless you are certain of the correct
+answer - give grounded and hallucination-free answers.
+</investigate_before_answering>
+
+<use_parallel_tool_calls>
+If you intend to call multiple tools and there are no dependencies
+between the tool calls, make all of the independent tool calls in
+parallel. Prioritize calling tools simultaneously whenever the
+actions can be done in parallel rather than sequentially. For
+example, when reading 3 files, run 3 tool calls in parallel to read
+all 3 files into context at the same time. Maximize use of parallel
+tool calls where possible to increase speed and efficiency.
+However, if some tool calls depend on previous calls to inform
+dependent values like the parameters, do NOT call these tools in
+parallel and instead call them sequentially. Never use placeholders
+or guess missing parameters in tool calls.
+</use_parallel_tool_calls>
+
+# CLAUDE.md
+
+## Identity & Context
+
+- Role: [e.g., Co-Head of Credit, Quant Researcher]
+- Domain: [e.g., algorithmic trading, credit derivatives, market microstructure]
+- Primary languages: [e.g., Python, C++, SQL]
+- Current focus: [e.g., systematic credit trading, bond ETF arbitrage]
+
+## Code Style & Standards
+
+- Type hints required in all Python functions
+- Docstrings: NumPy format preferred
+- Variable naming: snake_case for functions/variables, PascalCase for classes
+- Max line length: 88 (black formatter default)
+- Prefer explicit over implicit; avoid magic numbers
+- Use dataclasses or Pydantic for structured data
+
+## Mathematical & Technical Preferences
+
+- Show mathematical intuition before implementation
+- Include LaTeX notation in comments where helpful: `# E[X] = \int x f(x) dx`
+- Derive from first principles when explaining estimators/algorithms
+- Prefer vectorised numpy/pandas over loops
+- Statistical rigour: always specify null hypothesis, test assumptions
+
+## Architecture Patterns
+
+- Favour composition over inheritance
+- Separate concerns: data ingestion → transformation → signal → execution
+- Config-driven design; avoid hardcoded parameters
+- Idempotent functions where possible
+- Explicit error handling; fail fast with informative messages
+
+## Testing & Validation
+
+- Unit tests for all core logic (pytest)
+- Property-based testing for numerical code (hypothesis)
+- Integration tests for data pipelines
+- Validate statistical assumptions before model fitting
+
+## Documentation
+
+- README per module explaining purpose, inputs, outputs
+- Architecture Decision Records (ADRs) for significant choices
+- Modular docs: reference detailed .md files rather than inline everything
+
+## Communication Style
+
+- Direct and concise; skip preamble
+- Diplomatic framing when drafting messages
+- Chris Voss calibrated questions where appropriate
+- Professional tone; avoid unnecessary hedging
+
+## Domain-Specific Rules
+
+### Credit Trading
+- [e.g., Always include bid-ask spread in P&L calculations]
+- [e.g., RFQ timing constraints: assume 30s response windows]
+- [e.g., CDX roll conventions: follow standard market practice]
+
+### Research
+- [e.g., MFDFA: use polynomial order 2 unless specified]
+- [e.g., Kernel tests: default to RBF kernel with median heuristic]
+- [e.g., Calendar vs information time: always state which clock]
+
+## Project-Specific References
+
+Read these files for detailed guidance:
+- `docs/architecture.md` — system design
+- `docs/data-sources.md` — market data feeds, schemas
+- `docs/trading-logic.md` — signal generation, execution rules
+- `docs/research-methods.md` — statistical techniques, validation
+
+## Workflow & Tools
+
+- Git: conventional commits, squash merges to main
+- Pre-commit hooks: black, isort, mypy, ruff
+- CI: all tests must pass before merge
+- Multi-agent workflow: Cursor for scaffolding, Claude Code for implementation, review via PR
+
+## Anti-Patterns to Avoid
+
+- No silent failures; always log or raise
+- No pandas SettingWithCopyWarning — use .loc explicitly
+- No floating-point equality checks without tolerance
+- No unbounded memory growth in streaming contexts
+- Avoid premature optimisation; profile first
+
+## Session Learnings
+
+[Capture insights from productive sessions here. Periodically compact.]
+
+---
+
+*Last updated: YYYY-MM-DD*

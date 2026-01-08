@@ -1,0 +1,16 @@
+Run backtest for strategy: $ARGUMENTS
+
+Parse arguments:
+- strategy: carry, value, momentum
+- start: YYYY-MM-DD
+- end: YYYY-MM-DD
+- params: key=value pairs
+
+Workflow:
+1. Verify data availability (use data-availability-checker)
+2. Load appropriate skill for strategy
+3. Execute backtest
+4. Generate performance report
+5. Compare to benchmark and prior runs
+
+Example: /project:run-backtest carry --start 2022-01-01 --end 2024-01-01 --lookback 10

@@ -1,0 +1,29 @@
+---
+name: bond-data-profiler
+description: >
+  Profile bond/credit datasets for coverage, gaps, and quality issues.
+  Use when analysing new data sources, auditing completeness, 
+  or validating data before backtest.
+---
+
+# Bond Data Profiler
+
+## Workflow
+1. Scan directory for .csv, .parquet, .gz files
+2. Per dataset:
+   - Identify columns (see column-mappings.md)
+   - Generate summary: unique bonds, date range, completeness
+   - Compute duration buckets
+   - Population statistics: missingness, quantiles, distributions
+3. Gap analysis:
+   - Coverage gaps by month
+   - Bond-level continuity gaps
+   - Field-level gaps over time
+4. Output to `reports/{dataset}_summary.md` and `reports/{dataset}_gaps.md`
+5. Create `reports/INDEX.md` linking all outputs
+
+## Duration Buckets
+[0,1], [1,3], [3,5], [5,7], [7,10], [10,∞]
+
+## References
+See [column-mappings.md](column-mappings.md) for column name variations.

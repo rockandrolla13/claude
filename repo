@@ -1,0 +1,34 @@
+your-repo/
+├── CLAUDE.md                          # Project-level conventions (always loaded)
+├── .claude/
+│   ├── skills/
+│   │   ├── bond-data-profiler/        # Dataset profiling & gap analysis
+│   │   │   ├── SKILL.md
+│   │   │   └── column-mappings.md
+│   │   ├── data-availability-checker/ # Backtest feasibility checks
+│   │   │   ├── SKILL.md
+│   │   │   ├── rating-mappings.md
+│   │   │   └── data-sources.md
+│   │   ├── carry-backtest/            # Carry strategy backtesting
+│   │   │   ├── SKILL.md
+│   │   │   └── parameter-ranges.md
+│   │   └── research-workflow/         # Hypothesis pre-registration & holdouts
+│   │       ├── SKILL.md
+│   │       └── validation-checklist.md
+│   └── commands/
+│       ├── profile-data.md            # /project:profile-data
+│       ├── check-data.md              # /project:check-data
+│       └── run-backtest.md            # /project:run-backtest
+├── docs/
+│   ├── architecture.md                # System design
+│   ├── data-sources.md                # Data feed documentation
+│   └── trading-logic.md               # Signal/execution rules
+├── data/
+│   ├── reference/
+│   ├── pricing/
+│   └── trace/
+├── src/
+│   ├── strategies/
+│   ├── backtest/
+│   └── data/
+└── reports/                           # Generated outputs

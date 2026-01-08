@@ -1,0 +1,37 @@
+---
+name: research-workflow
+description: >
+  Manage research discipline: hypothesis pre-registration, holdout data,
+  preventing strategy degradation. Use when starting new research,
+  validating results, or documenting findings.
+---
+
+# Research Workflow
+
+## Pre-Registration
+Before running any backtest:
+1. Document hypothesis in `research/hypotheses/{YYYY-MM-DD}_{name}.md`
+2. Specify: signal logic, expected sign, universe, time period
+3. Define success criteria before seeing results
+
+## Holdout Protocol
+- Training: 2015-2020
+- Validation: 2021-2022
+- Test (holdout): 2023-2024 (touch ONCE)
+
+## Validation Checklist
+- [ ] Hypothesis pre-registered
+- [ ] No data snooping on holdout
+- [ ] Multiple testing correction applied
+- [ ] Out-of-sample Sharpe > 0.5
+- [ ] Turnover economically viable
+- [ ] Results robust to ±20% parameter perturbation
+
+## Documentation
+After research complete:
+1. Update `research/findings/{name}.md`
+2. Record: what worked, what didn't, parameter sensitivity
+3. If promoting to production, update `src/strategies/`
+
+## References
+See [validation-checklist.md](validation-checklist.md) for detailed criteria.

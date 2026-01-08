@@ -1,0 +1,173 @@
+Looking at your screen, this is a **data profiling/gap analysis specification** for bond datasets. It's a procedural checklist with clear steps — ideal for a **Skill** rather than CLAUDE.md.
+
+## Recommendation: Skill
+
+**Why Skill over CLAUDE.md:**
+- It's a *triggered workflow* (run when profiling datasets), not always-on context
+- Has sequential steps with outputs
+- Generates artifacts (reports, CSVs)
+- You don't want this loaded on every message
+
+## Proposed Structure
+
+```
+.claude/skills/bond-data-profiler/
+├── SKILL.md                    # Core workflow (what you have on screen)
+├── column-mappings.md          # Heuristics for varying column names
+└── templates/
+    └── INDEX.md.template       # Template for the index file
+```
+
+## SKILL.md
+
+```yaml
+---
+name: bond-data-profiler
+description: >
+  Profile bond/credit datasets for coverage, gaps, and quality issues.
+  Use when analysing new data sources, validating TRACE data, 
+  or auditing dataset completeness before backtest.
+---
+
+# Bond Data Profiler
+
+## Scope
+Scan directories for files ending in `.csv`, `.parquet` (and optionally `.gz`).
+
+## Per-Dataset Analysis
+
+### 1. Identify Structure
+- **Identifiers** (priority order): `isin`, `cusip`, `figi`, `instrument_id`, `bond_id`
+- **Date fields**: `date`, `as_of_date`, `trade_date`, `pricing_date`, `timestamp`
+  - Choose best available; if multiple, record all
+
+### 2. Dataset Summary Report
+Create `reports/{dataset_name}_summary.md` containing:
+
+| Metric | Description |
+|--------|-------------|
+| Unique bonds | Count of unique bond identifiers |
+| Date coverage | Min/max dates, number of distinct dates |
+| Column completeness | List columns with dtype and % missing |
+| Bonds per month | Count by duration bucket |
+
+### 3. Compute Duration
+- If `effective_duration` or `modified_duration` exists, use it
+- Else approximate using time-to-maturity in years at each observation date
+
+### 4. Duration Buckets
+Bucket into: `[0,1]`, `[1,3]`, `[3,5]`, `[5,7]`, `[7,10]`, `[10,∞]`
+
+Save: `reports/{dataset_name}_bonds_by_month_duration_bucket.csv`
+
+---
+
+## Population Statistics
+
+Add "Population check" section with:
+
+| Check | Method |
+|-------|--------|
+| Missingness | Top 15 columns by % missing |
+| Price/yield sanity | Use whichever exists |
+| Quantiles | p0, p1, p10, p50, p90, p99, p100 + min/max for price, yield, spread, OAS, z-spread |
+| Rating distribution | Counts by `rating` or `composite_rating` |
+| Coupon distribution | Quantiles for coupon (if exists) |
+| Liquidity proxy | Observations per bond (detect stale/inactive coverage) |
+
+---
+
+## Gap Finding & Backfill Guidance
+
+Create `reports/{dataset_name}_gaps.md` with:
+
+### Coverage Gaps by Month
+- Identify months where unique bonds drops sharply (e.g., <80% of median month)
+- List worst months and size of drop
+
+### Bond-Level Continuity Gaps
+- For each bond: first/last month present, missing months in between ("internal gaps")
+- Summarise: % of bonds with any internal gap; top 50 bonds with largest missing-month count
+
+### Field-Level Gaps
+For key fields (`price`, `yield`, `spread/oas`, `duration`, `rating`, `sector`, `maturity_date`):
+- Report % missing over time (monthly)
+- Highlight fields where missingness worsens materially in certain months
+
+### Backfill Plan
+Provide prioritised "Backfill plan" list (what to backfill first and why)
+
+---
+
+## Output
+
+All artifacts under `reports/`
+
+Include index file `reports/INDEX.md` linking to all per-dataset reports and gap reports.
+
+---
+
+## Implementation Notes
+- Implement in Python (pandas); use dask if files are large
+- Make robust to varying column names using [column-mappings.md](column-mappings.md)
+```
+
+## column-mappings.md
+
+```markdown
+# Column Name Heuristics
+
+## Identifiers
+| Canonical | Alternatives |
+|-----------|--------------|
+| isin | ISIN, isin_code |
+| cusip | CUSIP, cusip_id |
+| figi | FIGI, figi_id, bloomberg_figi |
+
+## Dates
+| Canonical | Alternatives |
+|-----------|--------------|
+| date | Date, DATE, as_of_date, pricing_date, trade_date |
+| maturity_date | maturity, mat_date, MATURITY |
+
+## Pricing
+| Canonical | Alternatives |
+|-----------|--------------|
+| price | Price, mid_price, clean_price |
+| yield | Yield, ytm, yield_to_maturity |
+| spread | oas, OAS, z_spread, asset_swap_spread |
+```
+
+## CLAUDE.md Addition
+
+Keep this minimal — just a pointer:
+
+```markdown
+## Data Profiling
+- For new dataset analysis, Claude should use the `bond-data-profiler` skill
+- All profiling outputs go to `reports/`
+```
+
+## Quick Setup Commands
+
+```bash
+# Create skill structure
+mkdir -p .claude/skills/bond-data-profiler/templates
+
+# Create the files (or have Claude do it from this spec)
+claude
+> Read the data profiling spec I showed you and create a skill at .claude/skills/bond-data-profiler/
+```
+
+## When It Activates
+
+User says:
+- "Profile the new TRACE dataset"
+- "Run gap analysis on the bond pricing data"
+- "Check data quality for the credit universe"
+
+Claude loads the skill and follows the workflow.
+
+---
+
+**TL;DR**: This is definitively a Skill — it's a triggered workflow with artifacts, not ambient context. Keep CLAUDE.md for code style and file locations only.

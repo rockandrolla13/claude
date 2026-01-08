@@ -1,0 +1,53 @@
+# Create full structure
+mkdir -p .claude/skills/{bond-data-profiler,data-availability-checker,carry-backtest,research-workflow}
+mkdir -p .claude/commands
+mkdir -p docs reports
+
+# Start Claude and create files
+claude
+
+> Create the CLAUDE.md file with project conventions for a credit trading research platform.
+> Include: code standards, data conventions, key paths, available skills, anti-patterns.
+
+> Create the bond-data-profiler skill at .claude/skills/bond-data-profiler/
+
+> Create the data-availability-checker skill at .claude/skills/data-availability-checker/
+
+> Create the carry-backtest skill at .claude/skills/carry-backtest/
+
+> Create the research-workflow skill at .claude/skills/research-workflow/
+
+> Create slash commands in .claude/commands/ for profile-data, check-data, run-backtest
+
+# Commit
+git add CLAUDE.md .claude/ docs/
+git commit -m "Add Claude Code configuration: skills, commands, conventions"
+```
+
+---
+
+## Workflow Integration
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        CLAUDE.md                                │
+│              (always loaded: style, paths, rules)               │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+           ┌──────────────────┼──────────────────┐
+           ▼                  ▼                  ▼
+   ┌───────────────┐  ┌───────────────┐  ┌───────────────┐
+   │ bond-data-    │  │ data-avail-   │  │ carry-        │
+   │ profiler      │  │ ability-      │  │ backtest      │
+   │               │  │ checker       │  │               │
+   │ "Profile the  │  │ "Can I run a  │  │ "Run carry    │
+   │  TRACE data"  │  │  2Y backtest  │  │  backtest"    │
+   │               │  │  on IG 5-7Y?" │  │               │
+   └───────────────┘  └───────────────┘  └───────────────┘
+           │                  │                  │
+           ▼                  ▼                  ▼
+   ┌─────────────────────────────────────────────────────┐
+   │                    reports/                         │
+   │  - dataset_summary.md                               │
+   │  - data_availability_YYYYMMDD.md                    │
+   │  - backtest_carry_YYYYMMDD.md                       │
+   └─────────────────────────────────────────────────────┘

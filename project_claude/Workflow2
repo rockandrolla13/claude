@@ -1,0 +1,39 @@
+---
+name: data-availability-checker
+description: >
+  Check data availability for backtesting by rating, duration, coupon filters.
+  Use when planning a backtest, validating data sufficiency, 
+  or determining maximum available history for a universe.
+---
+
+# Data Availability Checker
+
+## User Inputs
+| Parameter | Example | Notes |
+|-----------|---------|-------|
+| Rating | IG, HY, BBB, BB+ | Single or range |
+| Duration | [3,5], [5,7] | Years |
+| Coupon | [0,5], [5,8] | Percentage, optional |
+| Min bonds | 50 | Minimum universe size |
+| Desired period | 2Y, 5Y | Target length |
+
+## Workflow
+1. Filter reference data by rating, duration, coupon
+2. Check pricing data coverage for filtered universe
+3. Check TRACE data coverage for filtered universe
+4. Compute intersection: longest continuous period where all sources adequate
+5. Generate feasibility report with recommendations
+
+## Output
+- `reports/data_availability_{timestamp}.md` — summary report
+- `reports/data_availability_{timestamp}.csv` — monthly breakdown
+
+## Interactive
+If insufficient, suggest relaxations:
+- Broader rating range
+- Wider duration bucket
+- Remove coupon filter
+
+## References
+- [rating-mappings.md](rating-mappings.md) — letter ↔ numeric conversions
+- [data-sources.md](data-sources.md) — paths and column configs

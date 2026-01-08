@@ -1,0 +1,9 @@
+Profile bond dataset at path: $ARGUMENTS
+
+1. Use the bond-data-profiler skill
+2. Scan specified directory for .csv, .parquet files
+3. Generate summary and gap reports
+4. Create INDEX.md linking outputs
+5. Highlight critical data quality issues
+
+Example: /project:profile-data data/trace/

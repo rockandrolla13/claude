@@ -1,0 +1,86 @@
+---
+name: preregistration-validator
+description: >
+  Validate research compliance against pre-registration commitments.
+  Use before running backtests (check spec frozen) or after results 
+  (verify no post-hoc changes). Enforces audit trail requirements.
+---
+
+# Pre-Registration Validator
+
+## Purpose
+Ensure all research execution complies with pre-registered specifications.
+Flag any deviations that would invalidate results.
+
+## Pre-Execution Checklist
+
+### Specification Freeze
+- [ ] Universe definition documented and frozen
+- [ ] Horizon Δ declared (e.g., 21d)
+- [ ] Weighting scheme specified (equal risk / equal notional)
+- [ ] Regression spec written (controls, winsorization, SEs)
+- [ ] Kill criteria defined with thresholds
+- [ ] Success criteria defined with thresholds
+
+### Data Freeze
+- [ ] OIS/SOFR curve source locked
+- [ ] Credit curve source locked
+- [ ] TRACE mapping frozen
+- [ ] Outlier policy documented (e.g., discard > 3σ)
+
+### Audit Setup
+- [ ] YAML log file created
+- [ ] Git commit hash recorded
+- [ ] Timestamp of freeze recorded
+
+## Post-Execution Validation
+
+### Specification Compliance
+Compare executed parameters against pre-registration:
+
+| Parameter | Pre-Registered | Executed | Match? |
+|-----------|----------------|----------|--------|
+| Universe | | | |
+| Horizon | | | |
+| Weighting | | | |
+| Controls | | | |
+| Winsorization | | | |
+
+### Kill Criteria Check
+| Criterion | Threshold | Result | Status |
+|-----------|-----------|--------|--------|
+| OOS Sharpe | > 0 | | |
+| Ann. carry | > 0.1% | | |
+| Carry share | > 40% | | |
+| Funding vs carry | carry > funding | | |
+| Fill rate | > 70% | | |
+| Slippage | < 50bps | | |
+
+If ANY kill criterion triggered → **REJECT HYPOTHESIS**
+
+### Audit Trail Validation
+- [ ] All parameter choices logged
+- [ ] All data sources documented
+- [ ] No unexplained gaps in log
+- [ ] Git history shows no post-hoc spec changes
+
+## Deviation Handling
+
+### If deviation detected:
+1. Document the deviation explicitly
+2. Classify: Minor (doesn't affect inference) vs Major (invalidates)
+3. If Major: Results must be discarded
+4. If Minor: Document in limitations section
+
+### Red Flags (automatic invalidation)
+- Specification changed after seeing results
+- Holdout accessed more than once
+- Kill criterion triggered but ignored
+- Missing audit log entries
+
+## Output
+Generate `reports/preregistration_validation_{timestamp}.md`:
+- Compliance summary
+- Deviation list (if any)
+- Kill criteria results
+- Recommendation: PROCEED / REJECT / REVIEW

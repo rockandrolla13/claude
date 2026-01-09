@@ -1,0 +1,33 @@
+Validate pre-registration compliance: $ARGUMENTS
+
+Use preregistration-validator skill.
+
+Modes:
+- --pre: Before execution (check spec frozen)
+- --post: After execution (verify no changes)
+
+Example: /project:validate-prereg --pre
+Example: /project:validate-prereg --post --results reports/carry_backtest_20250109.md
+```
+
+---
+
+## Directory Structure
+```
+your-repo/
+├── CLAUDE.md                              # Core constraints + research discipline
+├── .claude/
+│   ├── skills/
+│   │   ├── carry-execution/
+│   │   │   └── SKILL.md                   # Full execution protocol
+│   │   └── preregistration-validator/
+│   │       └── SKILL.md                   # Compliance checking
+│   └── commands/
+│       ├── run-carry.md
+│       └── validate-prereg.md
+├── research/
+│   └── preregistration/
+│       └── carry_structural_v0.yaml       # Frozen spec
+├── data/
+├── src/
+└── reports/

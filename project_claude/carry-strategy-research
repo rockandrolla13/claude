@@ -1,0 +1,17 @@
+# Create the repo
+mkdir carry-strategy-research
+cd carry-strategy-research
+git init
+
+# Create structure
+mkdir -p .claude/skills/{carry-execution,preregistration-validator,bond-data-profiler,data-availability-checker}
+mkdir -p .claude/commands
+mkdir -p research/preregistration
+mkdir -p data/{reference,pricing,trace}
+mkdir -p src/{strategies,backtest,data}
+mkdir -p reports
+mkdir -p docs
+
+# Create placeholder files
+touch CLAUDE.md
+touch .gitignore

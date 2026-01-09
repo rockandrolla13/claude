@@ -1,0 +1,24 @@
+Execute carry strategy backtest: $ARGUMENTS
+
+## Pre-Conditions (VERIFY FIRST)
+1. Check pre-registration exists and is frozen
+2. Validate specification compliance
+3. Confirm holdout not previously accessed (if OOS run)
+
+## Execution
+1. Use carry-execution skill
+2. Load frozen parameters from pre-registration
+3. Run backtest with full audit logging
+4. Compute all metrics and attribution
+
+## Post-Execution
+1. Check kill criteria
+2. Generate audit trail
+3. Flag any deviations
+
+Arguments:
+- --validation (in-sample)
+- --holdout (single-touch OOS)
+- --sweep (parameter sensitivity, validation only)
+
+Example: /project:run-carry --validation --start 2020-01-01 --end 2022-12-31

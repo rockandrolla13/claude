@@ -1,0 +1,248 @@
+Yes, here's how to structure it:
+
+---
+
+## Option A: Dedicated Repo (Recommended for Paper)
+
+```bash
+# Create the repo
+mkdir carry-strategy-research
+cd carry-strategy-research
+git init
+
+# Create structure
+mkdir -p .claude/skills/{carry-execution,preregistration-validator,bond-data-profiler,data-availability-checker}
+mkdir -p .claude/commands
+mkdir -p research/preregistration
+mkdir -p data/{reference,pricing,trace}
+mkdir -p src/{strategies,backtest,data}
+mkdir -p reports
+mkdir -p docs
+
+# Create placeholder files
+touch CLAUDE.md
+touch .gitignore
+```
+
+### .gitignore
+
+```gitignore
+# Data (too large for git)
+data/pricing/*.parquet
+data/trace/*.parquet
+data/reference/*.parquet
+
+# Keep structure
+!data/*/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# Reports (optional - may want to track)
+# reports/*.csv
+
+# Secrets
+.env
+*.key
+```
+
+### Final Structure
+
+```
+carry-strategy-research/
+├── CLAUDE.md                          # Project constitution
+├── .gitignore
+├── .claude/
+│   ├── skills/
+│   │   ├── carry-execution/
+│   │   │   └── SKILL.md
+│   │   ├── preregistration-validator/
+│   │   │   └── SKILL.md
+│   │   ├── bond-data-profiler/
+│   │   │   ├── SKILL.md
+│   │   │   └── column-mappings.md
+│   │   └── data-availability-checker/
+│   │       ├── SKILL.md
+│   │       ├── rating-mappings.md
+│   │       └── data-sources.md
+│   └── commands/
+│       ├── run-carry.md
+│       ├── validate-prereg.md
+│       ├── profile-data.md
+│       └── check-data.md
+├── research/
+│   ├── preregistration/
+│   │   └── carry_structural_v0.yaml   # Frozen spec (NEVER edit after freeze)
+│   └── hypotheses/
+│       └── 2025-01-09_carry_rq1.md
+├── docs/
+│   ├── architecture.md
+│   ├── data-sources.md
+│   └── methodology.md
+├── data/
+│   ├── reference/
+│   │   └── .gitkeep
+│   ├── pricing/
+│   │   └── .gitkeep
+│   └── trace/
+│       └── .gitkeep
+├── src/
+│   ├── strategies/
+│   │   └── carry.py
+│   ├── backtest/
+│   │   ├── runner.py
+│   │   └── metrics.py
+│   └── data/
+│       └── loaders.py
+├── reports/
+│   └── .gitkeep
+└── tests/
+    └── test_carry.py
+```
+
+---
+
+## Option B: Monorepo (If You Have Multiple Strategies)
+
+```
+optiver-research/                      # Or whatever umbrella name
+├── CLAUDE.md                          # Global conventions
+├── .claude/
+│   ├── skills/                        # Shared skills
+│   │   ├── bond-data-profiler/
+│   │   └── preregistration-validator/
+│   └── commands/
+├── strategies/
+│   ├── carry/                         # This project
+│   │   ├── CLAUDE.md                  # Strategy-specific overrides
+│   │   ├── .claude/
+│   │   │   └── skills/
+│   │   │       └── carry-execution/
+│   │   ├── research/
+│   │   ├── src/
+│   │   └── reports/
+│   ├── value/
+│   │   └── ...
+│   └── momentum/
+│       └── ...
+├── data/                              # Shared data
+└── libs/                              # Shared code
+    └── backtest/
+```
+
+---
+
+## Quick Setup Script
+
+```bash
+#!/bin/bash
+# setup-carry-repo.sh
+
+REPO_NAME="carry-strategy-research"
+
+mkdir -p $REPO_NAME
+cd $REPO_NAME
+git init
+
+# Directories
+mkdir -p .claude/skills/{carry-execution,preregistration-validator,bond-data-profiler,data-availability-checker}
+mkdir -p .claude/commands
+mkdir -p research/{preregistration,hypotheses}
+mkdir -p docs
+mkdir -p data/{reference,pricing,trace}
+mkdir -p src/{strategies,backtest,data}
+mkdir -p reports
+mkdir -p tests
+
+# Placeholders
+touch data/{reference,pricing,trace}/.gitkeep
+touch reports/.gitkeep
+
+# .gitignore
+cat > .gitignore << 'EOF'
+data/**/*.parquet
+data/**/*.csv
+!data/**/.gitkeep
+__pycache__/
+*.pyc
+.venv/
+.env
+.vscode/
+.idea/
+EOF
+
+# Empty CLAUDE.md
+touch CLAUDE.md
+
+echo "Repo created. Run 'claude' to start populating files."
+```
+
+Run it:
+
+```bash
+chmod +x setup-carry-repo.sh
+./setup-carry-repo.sh
+cd carry-strategy-research
+claude
+```
+
+---
+
+## Then in Claude Code
+
+```
+> Create CLAUDE.md for a credit carry strategy research project.
+> Include: code standards, research discipline (pre-registration, holdout, kill criteria), 
+> file paths, available skills, anti-patterns.
+
+> Create the carry-execution skill from my pre-registration framework.
+
+> Create the preregistration-validator skill.
+
+> Create the bond-data-profiler and data-availability-checker skills.
+
+> Create slash commands for run-carry, validate-prereg, profile-data, check-data.
+```
+
+---
+
+## Commit Workflow
+
+```bash
+# Initial commit
+git add .
+git commit -m "Initial repo setup with Claude Code configuration"
+
+# After creating skills
+git add .claude/
+git commit -m "Add skills: carry-execution, preregistration-validator, data profiling"
+
+# Freeze pre-registration (IMPORTANT: tag it)
+git add research/preregistration/carry_structural_v0.yaml
+git commit -m "Freeze pre-registration spec v0"
+git tag -a prereg-v0 -m "Pre-registration frozen - DO NOT MODIFY"
+```
+
+The git tag creates an immutable reference point — critical for your audit trail.
+
+---
+
+## TL;DR
+
+**Yes, create a dedicated repo called `carry-strategy-research`** (or similar). Put everything inside it:
+
+```bash
+mkdir carry-strategy-research && cd carry-strategy-research
+git init
+# ... create structure ...
+claude
+```
+
+This keeps the paper, code, pre-registration, and Claude Code config together as one auditable unit.

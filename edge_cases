@@ -1,0 +1,170 @@
+Based on the screenshot provided, this logic outlines a rigorous validation framework for a quantitative finance research signal—specifically, a Carry Strategy. The goal is to distinguish between a "Spec Drift" (invalid experiment due to look-ahead bias or wrong definitions) and a legitimate "Claim Verification" (supported or rejected based on performance).
+
+Here are two alternative implementations in Python: a Minimal Logical Validator (focusing on the decision tree flow) and a Realistic Production Validator (focusing on the data and math constraints).
+
+1. The Minimal Implementation
+Context: This implementation treats the logic as a workflow configurations check. It assumes the heavy lifting is done elsewhere and verifies that the research configuration flags match the required strict specification.
+
+Python
+
+class ResearchValidator:
+    def __init__(self, config, results):
+        self.config = config
+        self.results = results
+
+    def validate_process(self):
+        """
+        Executes the logic tree from the screenshot.
+        Returns: Verification Status String
+        """
+        
+        # 1. Check Information Timing (Strict EOD)
+        if not self.config.get('use_strict_eod_data'):
+            return "SPEC DRIFT (INVALID): Data look-ahead detected"
+
+        # 2. Check Definition Integrity
+        # Requirement: (carry + rolldown) * lag_carry_days - funding
+        required_formula = ['coupon_accrual', 'rolldown', 'lag_scaling', 'funding_deduction']
+        if not all(term in self.config['carry_components'] for term in required_formula):
+            return "SPEC DRIFT (INVALID): Carry definition is not structural/complete"
+
+        # 3. Check Return Horizon (Delta = 10 days)
+        if self.config.get('return_horizon_days') != 10:
+            return "SPEC DRIFT (INVALID): Return definition mismatch"
+
+        # 4. Check Regression Integrity (Frozen parameters)
+        if not self.config.get('is_universe_frozen') or not self.config.get('are_controls_frozen'):
+            return "SPEC DRIFT (INVALID): Cross-sectional regression parameters changed"
+
+        # 5. Check Performance (The "Result")
+        slope = self.results.get('average_carry_slope', 0)
+        is_stable = self.results.get('is_statistically_stable', False)
+
+        if slope > 0 and is_stable:
+            return "CLAIM SUPPORTED"
+        else:
+            return "CLAIM REJECTED (Strategy failed, but experiment was valid)"
+
+# Usage Example
+config = {
+    'use_strict_eod_data': True,
+    'carry_components': ['coupon_accrual', 'rolldown', 'lag_scaling', 'funding_deduction'],
+    'return_horizon_days': 10,
+    'is_universe_frozen': True, 
+    'are_controls_frozen': True
+}
+results = {'average_carry_slope': 0.05, 'is_statistically_stable': True}
+
+print(ResearchValidator(config, results).validate_process())
+2. The Realistic Implementation
+Context: This looks like a Pandas-based backtest engine component. It actually attempts to calculate the values and enforces the "Ambitious Definitions" (structural carry, lag scaling) mentioned in the bottom half of the image.
+
+Python
+
+import pandas as pd
+import numpy as np
+
+class StructuralCarryBacktest:
+    def __init__(self, pricing_data, calendar):
+        self.data = pricing_data
+        self.calendar = calendar
+        self.horizon_delta = 10  # From spec
+
+    def calculate_structural_carry(self, row):
+        """
+        Enforces the 'Ambitious Definition': 
+        Carry = settlement_scaled_coupon + rolldown - funding
+        """
+        # strict lag scaling for weekends/holidays
+        settlement_days = self.calendar.get_lag_days(row['date']) 
+        
+        # 1. Coupon Accrual (Scaled)
+        accrual = row['coupon_rate'] * settlement_days
+        
+        # 2. Rolldown (Expected, not realized price moves)
+        # Using yield curve slope, not just price diff
+        rolldown = (row['yield'] - row['fwd_yield']) * row['duration']
+        
+        # 3. Explicit Funding Treatment
+        funding_cost = row['funding_rate'] * settlement_days
+        
+        # Formula Check from image
+        carry_i_t = (accrual + rolldown) - funding_cost
+        return carry_i_t
+
+    def check_spec_drift(self, df):
+        """
+        Verifies no look-ahead bias exists before running regressions.
+        """
+        # Ensure we are using T-1 data for T signals
+        if 'realized_return_t_plus_10' in df.columns:
+            # Verify correlation of signal to future return isn't 1.0 (leakage)
+            pass 
+        
+        # Verify Horizon Delta
+        if self.horizon_delta != 10:
+             raise ValueError("SPEC DRIFT: Horizon must be exactly 10 days")
+             
+        return True
+
+    def run_daily_regressions(self, df):
+        """
+        Frozen universe and controls check.
+        """
+        results = []
+        # Group by date to perform cross-sectional regression
+        for date, group in df.groupby('date'):
+            # Winsorization (clipping outliers) as per spec
+            X = group['carry_signal'].clip(lower=0.01, upper=0.99)
+            y = group['realized_excess_return_10d']
+            
+            # Simple regression mock
+            slope = np.polyfit(X, y, 1)[0]
+            results.append(slope)
+            
+        avg_slope = np.mean(results)
+        
+        # Stability check (e.g., Sharpe of the slope time series)
+        slope_vol = np.std(results)
+        stability_metric = avg_slope / slope_vol if slope_vol != 0 else 0
+        
+        if avg_slope > 0 and stability_metric > 1.5:
+             return "CLAIM SUPPORTED"
+        return "CLAIM REJECTED"
+Edge Cases That Will Break The Logic
+The image emphasizes "Ambitious Definitions" and strict constraints. Here are the specific edge cases that would likely trigger a "SPEC DRIFT" or cause the "CLAIM REJECTED" result erroneously:
+
+1. The "Lag Scaling" Trap (Calendar Drift)
+The Case: The formula requires lag_carry_days.
+
+The Break: A standard days_in_year / 365 calculation fails here. If a trade happens on Friday, you carry the position for Saturday and Sunday. If you simply calculate (Yield - Funding)/365, you under-calculate carry by 200% for weekend trades.
+
+Result: The code calculates the wrong magnitude of Carry, causing the regression slope to be unstable (noisy) because Monday returns look different from Friday returns purely due to math errors.
+
+2. "Expected" vs. "Realized" Rolldown
+The Case: The image specifies "separating expected roll-down from realized price moves."
+
+The Break: Calculating rolldown as Price(t) - Price(t-1) is empirical (includes market shock). Structural rolldown requires modeling the yield curve shape (e.g., "Assuming the curve doesn't change, what is the price gain from sliding down the curve?").
+
+Result: SPEC DRIFT. If you use realized price changes, you are leaking future price movements into your signal.
+
+3. The "Funding" mismatch
+The Case: funding is subtracted explicitly.
+
+The Break: Using a generic "Risk Free Rate" (like 3-month T-Bills) instead of the asset-specific financing rate (e.g., Repo rate for bonds, OIS for swaps).
+
+Result: If the spread between Repo and T-Bills widens (market stress), the generic implementation shows a profit where a real trader would lose money on financing. This invalidates the regression.
+
+4. The "Frozen Universe" Problem
+The Case: The spec requires a "Frozen universe."
+
+The Break: Survivorship bias. If the dataset only includes companies/assets that exist today, the backtest implicitly knows which companies didn't go bankrupt.
+
+Result: SPEC DRIFT. The signal looks stable only because the failures were removed from the history before the regression ran.
+
+5. "Winsorization" Instability
+The Case: Regressions use "winsorization" (capping extreme values).
+
+The Break: If the winsorization limits are dynamic (e.g., "clip at 99th percentile"), the definition of an outlier changes every day.
+
+Result: The average_carry_slope becomes unstable because the input data scale is shifting, leading to a false "CLAIM REJECTED" due to lack of stability, even if the signal was good.

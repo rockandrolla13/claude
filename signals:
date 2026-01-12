@@ -1,0 +1,57 @@
+signals:
+  units:
+    price: "USD per 100 par"
+    carry: "USD per 100 par per day"
+    rolldown: "USD per 100 par per day"
+    funding: "USD per 100 par per day"
+
+  lag_definition:
+    lag_carry_days:
+      method: "t_plus_1_settlement_minus_settlement"
+      rationale: "Align carry accrual window with settlement mechanics"
+
+  carry_components:
+    carry_accrual:
+      source_field: "carry"
+      scaling: "per_day"
+    rolldown:
+      source_field: "rolldown"
+      scaling: "per_day"
+    funding:
+      source_field: "financing_cost"
+      scaling: "per_day"
+
+  aggregation:
+    scaling_days: "lag_carry_days"
+    formula:
+      expected_excess_carry:
+        components:
+          - "carry_accrual"
+          - "rolldown"
+          - "funding"
+        expression: "(carry + rolldown - funding) * lag_carry_days"
+        rationale: "Carry and rolldown are per-day quantities"
+
+  non_negotiables:
+    - rule: "carry_and_rolldown_are_per_day"
+      enforce: true
+    - rule: "funding_days_equal_lag_carry_days"
+      enforce: true
+
+returns:
+  horizon_trading_days: 10
+
+  realized_return:
+    definition:
+      clean_price_return:
+        formula: "(CleanPrice_t_plus_delta - CleanPrice_t) / 100"
+      carry_component:
+        formula: "CarryAccrual_t_to_t_plus_delta"
+      funding_component:
+        formula: "FinancingCost_t_to_t_plus_delta"
+    rolldown_handling:
+      included_in_price: true
+      explicitly_added: false
+      rationale: >
+        Rolldown is excluded from realized return to avoid double counting,
+        as clean price changes already reflect curve roll effects.

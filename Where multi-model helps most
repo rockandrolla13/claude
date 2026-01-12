@@ -1,0 +1,152 @@
+Where multi-model helps most
+1) Better “Think First” (pre-Plan Mode)
+
+Use ChatGPT/Gemini before Claude Code to produce a sharper plan:
+
+ChatGPT: strongest at structured reasoning, checklists, tradeoff tables, “what am I missing?”, and turning vague goals into constraints.
+
+Gemini: often strong at broad exploration, alternative approaches, and (depending on your setup) handling multi-modal inputs; also good at generating multiple options quickly.
+
+Upgrade: Do “triangulation planning”
+
+Ask ChatGPT for a plan + risks + minimal architecture
+
+Ask Gemini for alternative architecture + edge cases
+
+Merge into a single plan.md you feed to Claude Code for implementation
+
+This reduces Claude’s tendency to invent structure.
+
+2) Higher quality CLAUDE.md
+
+Claude.md is a policy + conventions file. Multi-model improves it:
+
+Use ChatGPT to draft rules with rationale (“why”) and to remove fluff.
+
+Use Gemini to find “missing constraints” and “implicit assumptions” based on your repo conventions.
+
+Upgrade: Add a maintenance loop
+
+Whenever Claude deviates, paste the diff + your correction into ChatGPT and ask:
+“Turn this into a single crisp rule for CLAUDE.md (include why, keep it short).”
+
+3) Context window / degradation management (big win)
+
+Models drift when context bloats; the tutorial recommends /compact and /clear. Multi-model can make the reset cleaner:
+
+Upgrade: Use ChatGPT/Gemini as an external summarizer
+
+At any point, export:
+
+current plan
+
+key decisions
+
+current errors / failing tests
+
+“what we tried”
+
+Ask ChatGPT to produce a “handoff packet”:
+
+STATE.md (what’s true now)
+
+NEXT.md (next actions)
+
+RISKS.md (known traps)
+
+Then start a fresh Claude Code session and point it at these files.
+
+Result: you reset context without losing engineering rigor.
+
+4) Catching Claude’s failure modes faster
+
+Claude gets stuck in loops; another model can diagnose the loop without inheriting it.
+
+Upgrade: “Second model reviewer” pattern
+
+When Claude loops:
+
+copy the last 30–80 lines of terminal output + the current hypothesis
+
+ask ChatGPT: “What are the 3 most likely root causes and the next 3 tests?”
+
+Then feed those tests back to Claude Code.
+
+You’re basically forcing a fresh independent prior.
+
+5) Prompt engineering becomes reusable assets
+
+You can have ChatGPT/Gemini produce your reusable .claude/commands/* prompts:
+
+/debug_minimal.md
+
+/refactor_small.md
+
+/review_pr.md
+
+/design_doc.md
+
+Claude executes them; ChatGPT/Gemini refine them.
+
+Where multi-model usually does not help (or backfires)
+1) Implementation ping-pong
+
+If multiple models are generating code directly, you get:
+
+inconsistent style
+
+mismatched abstractions
+
+duplicated or contradictory changes
+
+Rule: one model writes code in the repo (Claude Code). Others plan/review/summarize.
+
+2) Over-architecture from “too many opinions”
+
+Triangulation is good, but you must converge:
+
+pick one architecture
+
+write it to plan.md
+
+stop asking for more options
+
+3) Conflicting instructions
+
+If ChatGPT says “keep it minimal” and Gemini says “use a framework,” Claude will do both poorly.
+
+Fix: consolidate into a single “source of truth” plan + CLAUDE.md.
+
+A practical enhanced workflow (what I’d actually do)
+
+Phase A — Design (ChatGPT/Gemini)
+
+ChatGPT: “Write a minimal architecture + constraints + acceptance tests.”
+
+Gemini: “Give 2 alternative designs + edge cases + failure modes.”
+
+You: choose. Merge into plan.md.
+
+Phase B — Implement (Claude Code)
+4) Claude reads CLAUDE.md + plan.md and implements.
+5) Hooks run formatting + typecheck/tests.
+
+Phase C — Review (ChatGPT)
+6) Paste diff + test output: “Review for overengineering, missing tests, and invariants.”
+7) Convert feedback to a short patch list → give to Claude.
+
+Phase D — Reset (when context degrades)
+8) ChatGPT produces a clean STATE/NEXT/RISKS packet.
+9) New Claude session continues.
+
+If you want one thing to add immediately
+
+Add three files at repo root and keep them tiny:
+
+plan.md (architecture + steps)
+
+SCRATCHPAD.md (current attempt + logs + hypotheses)
+
+STATE.md (what works, what fails, how to run tests)
+
+Use ChatGPT/Gemini to keep those crisp; use Claude to execute.

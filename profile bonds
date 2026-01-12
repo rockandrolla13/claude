@@ -1,0 +1,31 @@
+# Bond Data Profiler Skill
+
+## Purpose
+Profile bond datasets for carry strategy development.
+
+## Trigger
+Use when asked to "profile", "scan", or "analyze" bond data.
+
+## Workflow
+1. Scan directory for .csv, .parquet, .gz files
+2. Identify columns per column-mappings.md
+3. Generate reports/{dataset_name}_summary.md
+4. Generate reports/{dataset_name}_gaps.md
+5. Update reports/INDEX.md
+
+## Carry-Specific Requirements
+In addition to standard profiling, flag:
+- OAS availability (required for carry calc)
+- Duration availability (required for carry calc)
+- Yield fields (ytm, yield_to_worst, oas_yield)
+- Funding rate proxies (if present)
+- Rating coverage (for IG filtering)
+
+## Output Schema Recommendation
+After profiling, suggest column mapping for:
+- bond_universe.py loader
+- carry signal inputs
+
+## References
+- See column-mappings.md for field heuristics
+- See CLAUDE.md for project conventions

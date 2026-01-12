@@ -1,0 +1,15 @@
+
+
+Treat the repo like a regulated system:
+
+plan.md → legislative branch (definitions, meaning)
+
+prereg.yaml → constitution (frozen commitments)
+
+src/ → execution
+
+audit/ → evidence
+
+reports/ → outcomes
+
+research/ → exploration (pre-holdout only)

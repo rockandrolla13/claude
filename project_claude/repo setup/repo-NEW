@@ -1,0 +1,34 @@
+repo/
+├── .claude/                         ← Claude Code tooling (THIS)
+│   ├── commands/
+│   │   ├── prereg_check.md
+│   │   ├── run_in_sample.md
+│   │   ├── run_holdout.md
+│   │   ├── audit_summary.md
+│   │   └── debug_invariant.md
+│   ├── hooks/
+│   │   ├── pre_edit.sh
+│   │   ├── post_edit.sh
+│   │   └── pre_run.sh
+│   └── settings.json
+│
+├── CLAUDE.md                        ← global behavior + constraints
+├── plan.md                          ← design-time strategy definition
+├── prereg.yaml                      ← frozen research contract
+├── state.md                         ← mutable run status / next steps
+├── scratchpad.md                    ← working notes (disposable)
+│
+├── audit/                           ← immutable logs & evidence
+│   └── runs/
+│
+├── data/
+├── docs/
+├── reports/
+├── research/
+├── src/
+│   ├── validators/
+│   ├── data/
+│   ├── signals/
+│   ├── execution/
+│   └── backtest/
+└── tests/

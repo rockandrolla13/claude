@@ -1,0 +1,70 @@
+How this flows into the rest of the system
+Decision Tree → Preregistration
+
+Every branch becomes a frozen field in prereg.yaml
+
+No new objects allowed later
+
+Decision Tree → Code
+
+Each numbered block maps cleanly to a module:
+
+(1) → universe.py
+
+(2) → signals/carry.py
+
+(3) → funding.py
+
+(4) → portfolio/construct.py
+
+(5) → execution/model.py
+
+(6) → evaluation/metrics.py
+
+Claude now builds exactly what you defined.
+
+What does NOT go here
+
+❌ Regression specs
+❌ Robustness checks
+❌ Results
+❌ Alternative definitions
+❌ Notes like “maybe try X later” (that goes in scratchpad.md)
+
+Why this matters (especially for JFDS)
+
+This section:
+
+is effectively a pre-analysis plan in prose
+
+makes your prereg credible
+
+prevents reviewer accusations of:
+
+hidden degrees of freedom
+
+post-hoc redefinition of carry
+
+implicit look-ahead
+
+It also becomes Section 2.1 / 3.1 of the paper later, almost verbatim.
+
+What to do next (very concrete)
+
+Open plan.md
+
+Paste the template above
+
+Replace placeholders with numbers and formulas
+
+Stop when it fits on one page
+
+Only then move to prereg.yaml
+
+If you want, paste your rough carry idea in bullets and I’ll write this decision tree section fully filled-in, ready to drop into plan.md.
+
+the plan.md goes into the main repo? 
+
+Yes — plan.md goes in the main repo, at the top level.
+
+Here is the precise, non-negotiable placement and rationale, given your prereg + audit constraints.

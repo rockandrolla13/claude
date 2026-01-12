@@ -1,0 +1,234 @@
+# Carry Strategy MVP - Conversation Memory
+
+## Project Context
+Building MVP for algorithmic corporate bond carry trading strategy using Claude Code framework.
+
+---
+
+## Architecture (Final)
+
+```
+carry-strategy-research/
+├── .claude/                              ← LIVES AT PROJECT ROOT
+│   ├── skills/
+│   │   └── bond-data-profiler/
+│   │       ├── SKILL.md                  ← multi-mode skill
+│   │       ├── column-mappings.md
+│   │       └── modes/
+│   │           ├── profile.md            ← data quality, gaps
+│   │           ├── forward-returns.md    ← T+1, T+5, T+20 returns
+│   │           └── carry.md              ← carry calculation
+│   │   ├── carry-execution/
+│   │   │   └── SKILL.md
+│   │   ├── preregistration-validator/
+│   │   │   └── SKILL.md
+│   │   └── data-availability-checker/
+│   │       ├── SKILL.md
+│   │       ├── rating-mappings.md
+│   │       └── data-sources.md
+│   └── commands/
+│       ├── run-carry.md
+│       ├── validate-prereg.md
+│       ├── profile-data.md
+│       └── check-data.md
+├── CLAUDE.md                             ← project constitution
+├── plan.md                               ← execution plan
+├── prereg.yaml                           ← frozen pre-registration
+├── research/
+│   ├── preregistration/
+│   │   └── carry_structural_v0.yaml
+│   └── hypotheses/
+├── docs/
+│   ├── architecture.md
+│   ├── data-sources.md
+│   └── methodology.md
+├── data/
+│   ├── reference/
+│   ├── pricing/
+│   └── trace/
+├── src/
+│   ├── data/
+│   │   └── bond_universe.py              ← NEXT TO BUILD
+│   ├── signals/
+│   │   └── carry.py
+│   ├── portfolio/
+│   ├── execution/
+│   └── backtest/
+├── reports/                              ← profiler outputs
+├── tests/
+│   ├── data/
+│   ├── signals/
+│   └── fixtures/
+└── notebooks/
+```
+
+---
+
+## Key Decisions Made
+
+### 1. Skill Organization
+- **One skill with modes** (not separate skills)
+- Bond-data-profiler handles: profile, forward-returns, carry
+- Shared column-mappings.md across all modes
+
+### 2. Carry Formula
+```
+gross_carry = (oas / 10000) * duration
+net_carry = gross_carry - funding_rate * duration
+roll_down ≈ -duration * (yield(T-dt) - yield(T)) / dt
+```
+
+### 3. Data Conventions
+- Yields in decimal (0.05 = 5%)
+- Duration = modified duration
+- All dates as pd.Timestamp
+- OAS in basis points
+
+### 4. Build Sequence
+```
+Phase 1: Data Layer
+  Conv 1: Profile data (use bond-data-profiler skill)
+  Conv 2: bond_universe.py loader
+  Conv 3: Yield curve construction
+
+Phase 2: Signals
+  Conv 4: Carry calculation
+  Conv 5: Signal normalization
+
+Phase 3: Backtest
+  Conv 6: Design (Opus)
+  Conv 7: Implementation (Sonnet)
+  Conv 8: Transaction costs
+  Conv 9: P&L attribution
+
+Phase 4: Validation
+  Conv 10: Sanity checks
+  Conv 11: Risk metrics
+```
+
+---
+
+## Bond-Data-Profiler Skill Spec
+
+### SKILL.md
+```markdown
+# Bond Data Profiler Skill
+
+## Purpose
+Profile bond datasets and compute derived analytics for carry strategy.
+
+## Trigger
+- "profile [path]" → data quality mode
+- "compute forward returns [path]" → returns mode
+- "calculate carry [path]" → carry mode
+
+## Modes
+1. Profile: scan, quality, gaps → reports/{dataset}_summary.md
+2. Forward Returns: 1d, 5d, 20d, 60d → data/{dataset}_forward_returns.parquet
+3. Carry: gross/net carry → data/{dataset}_carry_signals.parquet
+
+## Workflow
+1. Always profile first
+2. Then returns or carry
+3. All use column-mappings.md
+```
+
+### column-mappings.md
+```markdown
+## Identifiers (priority)
+cusip, isin, figi, instrument_id, bond_id
+
+## Dates
+as_of_date, date, pricing_date, trade_date, timestamp
+
+## Carry Inputs
+| Field | Variations |
+|-------|------------|
+| OAS | oas, option_adjusted_spread, oas_bp |
+| Duration | mod_duration, modified_duration, duration |
+| Yield | ytm, yield_to_maturity, yield_to_worst |
+| Price | price, clean_price, mid_price |
+| Rating | rating, sp_rating, composite_rating |
+| Sector | sector, industry, gics_sector |
+
+## Funding
+sofr, libor, treasury_yield, swap_rate
+```
+
+---
+
+## CLAUDE.md Additions Needed
+
+```markdown
+## Skills
+- `.claude/skills/bond-data-profiler/` — profile, forward returns, carry
+- Invoke: "Profile bond data at [path]"
+- Outputs: reports/
+
+## Data Profiling Workflow
+1. Profile first → understand columns, gaps
+2. Build loader using exact column names
+3. Re-profile after data source changes
+
+## Conventions
+- Yields: decimal (0.05 not 5%)
+- Duration: modified
+- OAS: basis points
+- Dates: pd.Timestamp
+- Columns: lowercase_with_underscores
+```
+
+---
+
+## Current Status
+
+✅ Completed:
+- CLAUDE.md created
+- plan.md created
+- prereg.yaml created
+- Repo structure exists
+
+🔲 Next Actions:
+1. Create bond-data-profiler skill files
+2. Profile existing data
+3. Build bond_universe.py using profile output
+
+---
+
+## Prompt Templates
+
+### Create Skill
+```
+Create the bond-data-profiler skill at .claude/skills/bond-data-profiler/
+
+Include modes for: profile, forward-returns, carry
+Reference prereg.yaml for carry formula
+Output to reports/ for profiles, data/ for computed signals
+```
+
+### Profile Data
+```
+Profile the bond data at [DATABASE_PATH]
+
+Use the bond-data-profiler skill.
+Flag carry-critical fields: OAS, duration, yield
+Recommend column mapping for src/data/bond_universe.py
+```
+
+### Build Loader
+```
+Build the bond universe loader.
+
+Data source: [PATH]
+Output: DataFrame [cusip, issuer, coupon, maturity_date, rating, sector, duration, oas]
+Filter: IG only, USD, active
+File: src/data/bond_universe.py
+Reference column names from profile report.
+```
+
+---
+
+## User Context
+- Has database path for bond data
+- User preference: technical/mathematical responses with clear intuition
+- Framework: Claude Code best practices applied to quant development

@@ -1,0 +1,23 @@
+
+
+**Data source:** [paste your database path/connection string here]
+
+**Output:**
+- DataFrame with columns: [cusip, issuer, coupon, maturity_date, rating, sector, issue_size, currency, duration, oas]
+- Filter: IG only, USD, active (not matured/called)
+
+**Do:**
+- Single function: load_universe(as_of_date: str) -> pd.DataFrame
+- Handle your DB's specific format/quirks (list any you know)
+- Add basic validation (no nulls in cusip, maturity > as_of_date)
+
+**Do NOT:**
+- Transform yields or calculate carry (next module)
+- Cache or persist (just read)
+- Add CLI or logging
+
+**Files:** 
+- src/data/bond_universe.py
+- tests/test_bond_universe.py
+
+Reference CLAUDE.md for conventions.

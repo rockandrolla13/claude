@@ -1,0 +1,197 @@
+Below is a **clear, efficient workflow** to produce the *best possible plan* for your corporate bond carry strategy using the “Think → Plan → Constrain → Execute → Reset → Automate” methodology, **while respecting your NON-NEGOTIABLE prereg + holdout rules**.
+
+---
+
+## 0) Create the 4 persistent files (external memory)
+
+Put these at repo root so every session can re-load them:
+
+1. `plan.md` — single source of truth: architecture + steps + acceptance tests
+2. `prereg.yaml` — frozen specification (what will be locked before results)
+3. `state.md` — what’s true today + what’s failing + how to run
+4. `scratchpad.md` — working notes + hypotheses + terminal snippets (throwaway)
+
+**Rule:** Claude Code implements from `plan.md` + `prereg.yaml`. ChatGPT/Gemini help you *author/refine* them.
+
+---
+
+## 1) “Think First” = force the strategy into a decision tree (no code)
+
+**Your output of this phase** is a one-page definition of the strategy in terms of *measurable objects*.
+
+### Deliverables
+
+* A one-sentence strategy claim (falsifiable)
+* Explicit definition of:
+
+  * universe, exclusions, liquidity rules
+  * funding model
+  * carry + rolldown decomposition
+  * horizons / rebalance cadence
+  * trading assumptions (fill/slippage)
+  * risk controls & neutralizations
+  * performance metrics (including your kill criteria)
+
+### How to do it with models
+
+* **ChatGPT prompt:** “Turn my description into a decision tree + minimal spec. Highlight any ambiguous definitions that would cause spec drift.”
+* **Gemini prompt:** “Propose 2 alternative implementations of the same carry idea (one minimal, one more realistic) and list edge cases that will break measurement.”
+
+Then you (human) pick one path and write it into `plan.md`.
+
+---
+
+## 2) Pre-registration construction (lock spec BEFORE touching holdout)
+
+This is the most important step given your rules. You want prereg to be:
+
+* **complete enough** to prevent post-hoc tweaks
+* **not so broad** that it becomes 200 parameters and un-followable
+
+### `prereg.yaml` sections (template)
+
+* `hypotheses`: primary + secondary hypotheses
+* `universe`: sources, rating bucket, sector rules, maturity/DTM bounds, min issue size, min liquidity
+* `signals`:
+
+  * exact carry formula(s)
+  * rolldown definition (curve source, interpolation)
+  * funding cost definition (repo curve proxy, haircuts, sector adjustments)
+* `portfolio_construction`:
+
+  * long/short rules, weights, constraints, turnover cap
+* `execution_model`:
+
+  * slippage, fills, transaction costs, RFQ fill model (if applicable)
+* `risk_controls`:
+
+  * duration neutral? sector neutral? rating neutral?
+* `evaluation`:
+
+  * sample splits, holdout dates, metrics
+* `kill_criteria`: your list + exact computation definition
+* `logging`: what is written where, on each run
+
+### Model usage
+
+* **ChatGPT:** “Write a prereg.yaml that is minimal but complete; propose exactly 10 fields that must be locked to prevent p-hacking.”
+* **Gemini:** “Red-team this prereg: list ways I could accidentally ‘peek’ or drift specs; propose guardrails.”
+
+You then freeze `prereg.yaml` and treat it as immutable.
+
+---
+
+## 3) Architecture plan (the code plan you hand to Claude)
+
+Write `plan.md` as a build plan with *interfaces*, not vibes.
+
+### Modules (suggested)
+
+* `src/data/` ingestion & joins (reference/pricing/trace)
+* `src/signals/carry.py` compute carry/rolldown/funding components
+* `src/portfolio/construct.py` build positions from prereg spec
+* `src/execution/model.py` slippage/fill simulation + costs
+* `src/backtest/run.py` orchestrator: loads prereg, runs, writes report
+* `src/audit/logger.py` YAML logging (“if not logged, didn’t happen”)
+* `src/validators/prereg_validator.py` enforce frozen spec + holdout gates
+* `reports/` outputs + a single “results.json” summary
+
+### Acceptance tests (must be in plan.md)
+
+* Unit tests for carry decomposition identity checks
+* Determinism: same inputs → same outputs (hash dataset snapshot)
+* Prereg validator blocks:
+
+  * running holdout unless prereg is frozen
+  * re-running holdout (single-touch)
+  * changing prereg fields after in-sample run begins
+* Kill criteria automatically computed and written
+
+**Claude Code now has a tight target.**
+
+---
+
+## 4) Execution sequencing (to preserve holdout integrity)
+
+You want a staged pipeline:
+
+### Stage A — Build on synthetic/sandbox data (safe)
+
+* Generate a tiny synthetic dataset
+* Validate plumbing, logging, validator rules
+* Validate carry decomposition & invariants
+
+### Stage B — In-sample only (development)
+
+* Use only the *training period* (explicit dates)
+* Iterate code quality and correctness
+* **Do not** touch holdout data
+
+### Stage C — “Pre-holdout lock”
+
+* Freeze prereg checksum + code commit hash
+* Run `preregistration-validator` (must pass)
+* Produce a “run ticket” (timestamp + hashes)
+
+### Stage D — Single-touch holdout run (one shot)
+
+* Validator enforces “first and only” holdout access
+* Results written once, with all metrics + kill criteria outcome
+* Any rerun auto-fails and is logged as invalid
+
+---
+
+## 5) Multi-model division of labor (the efficient part)
+
+Use models like this:
+
+### ChatGPT (planner / editor / red-team)
+
+* Converts your strategy into a rigorous prereg
+* Writes `plan.md` acceptance tests
+* Red-teams for spec drift and hidden degrees of freedom
+* Creates a “minimal viable implementation” checklist
+
+### Gemini (alternatives / edge cases / failure modes)
+
+* Alternative carry definitions (and how they break)
+* Edge cases in bonds data (stale prices, odd coupons, calls, accrual)
+* Failure modes in funding proxies and curve construction
+
+### Claude Code (implementer / refactorer)
+
+* Implements the exact modules per `plan.md`
+* Adds tests, hooks, logging
+* Enforces prereg + holdout constraints mechanically
+
+**Rule:** only one model writes repo code (Claude). The others produce text artifacts you paste into `plan.md` / `prereg.yaml`.
+
+---
+
+## 6) The “copy-paste reset” protocol (when sessions bloat)
+
+When Claude starts looping or context bloats:
+
+1. Copy terminal snippet + current hypothesis into `scratchpad.md`
+2. `/compact`
+3. `/clear`
+4. Restart with: “Read `CLAUDE.md`, `plan.md`, `prereg.yaml`, `state.md`. Continue at Step X.”
+
+---
+
+## 7) What to do next (concrete next 60 minutes)
+
+1. Create the 4 files: `plan.md`, `prereg.yaml`, `state.md`, `scratchpad.md`
+2. Write the *one-sentence strategy claim* in `plan.md`
+3. Ask ChatGPT to draft `prereg.yaml` from your claim + kill criteria
+4. Ask Gemini to red-team ambiguities + propose edge cases
+5. Merge + freeze `prereg.yaml` (checksum it)
+6. Hand `plan.md` + `prereg.yaml` to Claude Code to scaffold repo modules + validators + tests
+
+---
+
+If you paste the **actual strategy description** (even rough bullets: universe, carry definition, funding proxy, holding period, portfolio rules), I’ll turn it into:
+
+* a **minimal but complete `prereg.yaml`** (locked fields + kill criteria definitions)
+* a **`plan.md`** with module interfaces + acceptance tests + exact build order
+  …so you can immediately drop it into Claude Code and start implementing without leaking degrees of freedom.

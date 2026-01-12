@@ -1,0 +1,32 @@
+## CLAUDE.md — Corporate Bond Carry MVP
+
+### Data Models
+- `Bond`: CUSIP, issuer, coupon, maturity, OAS, duration, convexity, rating, sector
+- `CarrySignal`: bond_id, date, gross_carry, net_carry (after funding), roll_down_component
+- `Position`: bond_id, notional, entry_date, entry_price, current_mark
+- `Trade`: bond_id, direction, notional, timestamp, execution_price, slippage
+
+### Carry Calculation
+Gross carry for bond i:
+  carry_i = (yield_i - rf_funding) * duration_i + roll_down_i
+  
+Roll-down approximation:
+  roll_down_i ≈ -duration_i * (yield(T-dt) - yield(T)) / dt
+
+Net carry:
+  net_carry_i = gross_carry_i - transaction_cost_i - financing_spread_i
+
+### Storage
+- Parquet files for historical data (date-partitioned)
+- SQLite for position/trade state (MVP simplicity)
+- No Postgres, no Redis (defer complexity)
+
+### Boundaries
+/src
+  /data       → loaders, cleaners
+  /signals    → carry calculation, other factors
+  /portfolio  → optimization, risk
+  /execution  → order generation, TCA
+  /backtest   → simulation engine
+/tests
+/notebooks   → exploratory only, no production logic

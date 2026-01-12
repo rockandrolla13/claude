@@ -1,0 +1,168 @@
+Here’s the **actionable, do-this checklist** distilled from the full Claude Code tutorial. No philosophy, just execution.
+
+---
+
+## 1. Before You Touch Claude (Mandatory)
+
+* **Write a plan first** (5–10 min).
+
+  * What are you building?
+  * What exists already?
+  * What is the *end state*?
+  * Constraints (performance, simplicity, deadlines).
+* Use **Plan Mode** (Shift + Tab twice) before any real work.
+* If unsure, **co-design the plan with an LLM** first, then execute in Claude Code.
+
+---
+
+## 2. Always Specify Architecture (Even for Small Tasks)
+
+Instead of:
+
+> “Build an auth system”
+
+Do:
+
+* Data models involved
+* Storage choices
+* Lifetimes / TTLs
+* Boundaries (routes, folders, files)
+* Explicit scope
+
+**Rule:** If you didn’t define structure, Claude will invent one (badly).
+
+---
+
+## 3. Set Up `CLAUDE.md` Properly (High Leverage)
+
+Create a short `CLAUDE.md` at repo root.
+
+**Include only:**
+
+* Project-specific conventions
+* Non-obvious commands
+* Architectural constraints
+* “Why” behind rules
+
+**Hard limits:**
+
+* Keep it short (≲150 instructions total)
+* No generic docs
+* No tutorials
+
+**Maintenance loop:**
+
+* If you correct Claude twice → add it to `CLAUDE.md`
+* Press `#` while working to update it automatically
+
+---
+
+## 4. Manage Context Aggressively
+
+Context degrades at **~30–40%**, not 100%.
+
+**Rules:**
+
+* One conversation = one feature/task
+* Never mix unrelated work
+* Write plans to files (`plan.md`, `SCRATCHPAD.md`)
+* Keep those files at repo root
+
+**Reset protocol (use often):**
+
+1. Copy key info
+2. `/compact`
+3. `/clear`
+4. Paste back only essentials
+
+---
+
+## 5. Prompt Like an Engineer
+
+Every prompt should include:
+
+* **What to do**
+* **What NOT to do**
+* **Why it matters**
+
+Example:
+
+> “Keep this minimal. No new abstractions. One file only. This runs on every request so prioritize speed over flexibility.”
+
+**Golden rules:**
+
+* Specific > vague
+* Constraints > freedom
+* Examples > descriptions
+
+---
+
+## 6. Pick the Right Model for the Job
+
+* **Opus** → planning, architecture, tradeoffs
+* **Sonnet** → execution, refactors, boilerplate
+
+**Workflow:**
+
+1. Plan with Opus
+2. Implement with Sonnet
+3. Same `CLAUDE.md` = clean handoff
+
+---
+
+## 7. Use Tools (But Don’t Go Crazy)
+
+Try these incrementally:
+
+* **MCP** → eliminate copy/paste (GitHub, DBs, APIs)
+* **Hooks** → auto-format, type-check, lint after edits
+* **Slash commands** → reusable prompts (`/review`, `/debug`, `/deploy`)
+
+If you repeat a task → automate it.
+
+---
+
+## 8. When Claude Gets Stuck
+
+Do **not** keep pushing.
+
+Instead:
+
+* `/clear` and restart
+* Reduce scope
+* Provide a minimal example
+* Reframe the problem (e.g. state machine vs logic flow)
+
+**Rule:** If you explained something 3 times, change strategy.
+
+---
+
+## 9. Build Systems, Not One-Offs
+
+* Use headless mode (`-p`) for automation
+* Script Claude into CI, PR review, docs, logs
+* Log outputs
+* Improve `CLAUDE.md` based on failures
+
+**Flywheel:**
+Claude mistake → fix rules/tools → Claude improves → repeat
+
+---
+
+## 10. Mental Model to Internalize
+
+* Claude is **stateless**
+* Output quality = input quality
+* Bad results = unclear thinking, not bad models
+
+---
+
+### One-Sentence Operating Rule
+
+> **Think → Plan → Constrain → Execute → Reset early → Automate what repeats**
+
+If you want, I can turn this into:
+
+* a **one-page checklist**
+* a **default `CLAUDE.md` template**
+* or a **Claude Code workflow you can drop into Cursor / terminal**

@@ -1,0 +1,461 @@
+Below is a Claude “skill” instruction (as a .claude/commands prompt) plus drop-in Python code (pandas + matplotlib, no seaborn) that generates:
+
+Quantile monotonicity plot (scale-invariant)
+
+Carry–realized slope diagnostics (regression slope + SE)
+
+Results table (quantiles + IC + slope + calibration)
+
+No optimization, no portfolio sizing.
+
+1) Create a Claude skill (slash command)
+
+Where: repo/.claude/commands/alpha_diagnostics.md
+
+# /alpha_diagnostics
+
+You are working in this repo with strict prereg and no optimization. Add scale-invariant structural alpha diagnostics.
+
+Goal:
+- Visualize whether expected carry orders realized outcomes (monotonicity).
+- Estimate slope of realized vs expected (levels + standardized).
+- Produce a results table and save all artifacts in reports/diagnostics/.
+
+Constraints:
+- Use pandas + matplotlib only (no seaborn).
+- No portfolio optimization.
+- Use cross-sectional ranking within each rebalance date.
+- Support filtering to executed trades only (e.g., executed == True).
+- Save plots as PNG and results table as CSV + Markdown.
+- Code must be typed, testable, and run as a script.
+
+Deliverables:
+1) Create `src/diagnostics/alpha_diagnostics.py` with:
+   - `load_data(path)`
+   - `add_cross_sectional_quantiles(df, by_date_col, signal_col, n_quantiles)`
+   - `ols_slope_with_se(x, y)` (no external deps)
+   - `make_quantile_monotonicity_plot(...)`
+   - `make_scatter_with_binned_means_and_regression(...)`
+   - `make_results_table(...)`
+   - `main()` with CLI args
+
+2) Add minimal tests:
+   - `tests/test_alpha_diagnostics.py` for quantile assignment + ols slope function.
+
+3) Update `state.md` with how to run:
+   - `python -m src.diagnostics.alpha_diagnostics --input <path> --out reports/diagnostics`
+
+Assume input has columns:
+- `date` (UTC), `expected_carry`, `realized_return`
+Optionally:
+- `executed` (bool)
+If executed exists, default filter executed==True unless user passes `--include_unexecuted`.
+
+
+That gives Claude a crisp target and ensures it doesn’t invent optimization.
+
+2) Add the code: src/diagnostics/alpha_diagnostics.py
+from __future__ import annotations
+
+import argparse
+import os
+from dataclasses import dataclass
+from typing import Optional, Tuple
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+
+REQUIRED_COLS = ["date", "expected_carry", "realized_return"]
+
+
+def load_data(path: str) -> pd.DataFrame:
+    """
+    Load input data from CSV or Parquet.
+
+    Expected columns:
+      - date (UTC-like), expected_carry, realized_return
+    Optional:
+      - executed (bool)
+
+    Returns a DataFrame with date parsed to pandas datetime (UTC if possible).
+    """
+    if path.lower().endswith(".parquet"):
+        df = pd.read_parquet(path)
+    elif path.lower().endswith(".csv"):
+        df = pd.read_csv(path)
+    else:
+        raise ValueError(f"Unsupported file type: {path}. Use .csv or .parquet")
+
+    missing = [c for c in REQUIRED_COLS if c not in df.columns]
+    if missing:
+        raise ValueError(f"Missing required columns: {missing}")
+
+    df = df.copy()
+    df["date"] = pd.to_datetime(df["date"], utc=True, errors="coerce")
+    if df["date"].isna().any():
+        raise ValueError("Some rows have unparsable 'date'. Fix input data.")
+
+    # Enforce numeric
+    df["expected_carry"] = pd.to_numeric(df["expected_carry"], errors="coerce")
+    df["realized_return"] = pd.to_numeric(df["realized_return"], errors="coerce")
+
+    df = df.dropna(subset=["expected_carry", "realized_return"])
+    return df
+
+
+def add_cross_sectional_quantiles(
+    df: pd.DataFrame,
+    by_date_col: str,
+    signal_col: str,
+    n_quantiles: int = 10,
+) -> pd.DataFrame:
+    """
+    Assign quantiles of signal cross-sectionally within each date.
+    This is scale-invariant and prevents time-varying distribution issues.
+
+    Adds:
+      - q: int in [1..n_quantiles]
+      - q_mid: float in (0,1] quantile midpoint used for x-axis plots
+      - signal_z: z-scored signal within date (scale-free)
+    """
+    if n_quantiles < 2:
+        raise ValueError("n_quantiles must be >= 2")
+
+    out = df.copy()
+
+    def _per_date(g: pd.DataFrame) -> pd.DataFrame:
+        s = g[signal_col]
+        # z-score within date; handle constant case
+        s_mean = s.mean()
+        s_std = s.std(ddof=0)
+        g["signal_z"] = (s - s_mean) / (s_std if s_std > 0 else 1.0)
+
+        # rank -> quantile buckets, robust to ties
+        r = s.rank(method="first")
+        # pd.qcut can fail if too few unique values; fallback to cut on ranks
+        try:
+            g["q"] = pd.qcut(r, q=n_quantiles, labels=False) + 1
+        except ValueError:
+            # If not enough unique values, reduce effective quantiles
+            eff_q = max(2, min(n_quantiles, int(r.nunique())))
+            g["q"] = pd.qcut(r, q=eff_q, labels=False) + 1
+            # Map to 1..n_quantiles scale for consistent plotting
+            g["q"] = np.ceil(g["q"] * (n_quantiles / eff_q)).astype(int)
+            g["q"] = g["q"].clip(1, n_quantiles)
+
+        g["q_mid"] = g["q"] / n_quantiles
+        return g
+
+    out = out.groupby(by_date_col, group_keys=False).apply(_per_date)
+    out["q"] = out["q"].astype(int)
+    return out
+
+
+def ols_slope_with_se(x: np.ndarray, y: np.ndarray) -> Tuple[float, float, float]:
+    """
+    Simple OLS y = a + b x with homoskedastic standard error for b.
+
+    Returns: (slope b, se_b, intercept a)
+
+    This is scale-aware; if you want scale invariance, regress y on z-scored x
+    and/or z-score y as well.
+    """
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+
+    mask = np.isfinite(x) & np.isfinite(y)
+    x = x[mask]
+    y = y[mask]
+    n = x.size
+    if n < 3:
+        return np.nan, np.nan, np.nan
+
+    x_mean = x.mean()
+    y_mean = y.mean()
+
+    Sxx = np.sum((x - x_mean) ** 2)
+    if Sxx <= 0:
+        return np.nan, np.nan, np.nan
+
+    b = np.sum((x - x_mean) * (y - y_mean)) / Sxx
+    a = y_mean - b * x_mean
+
+    resid = y - (a + b * x)
+    # sigma^2 = RSS / (n - 2)
+    sigma2 = np.sum(resid ** 2) / max(1, (n - 2))
+    se_b = np.sqrt(sigma2 / Sxx)
+    return float(b), float(se_b), float(a)
+
+
+def spearman_ic_by_date(df: pd.DataFrame, date_col: str) -> pd.Series:
+    """
+    Compute Spearman rank IC per date: corr(rank(expected), rank(realized)).
+    """
+    def _ic(g: pd.DataFrame) -> float:
+        if g.shape[0] < 3:
+            return np.nan
+        return g["expected_carry"].rank().corr(g["realized_return"].rank(), method="pearson")
+
+    return df.groupby(date_col).apply(_ic)
+
+
+def make_quantile_monotonicity_plot(
+    df: pd.DataFrame,
+    out_path: str,
+    n_quantiles: int,
+    title: str,
+) -> pd.DataFrame:
+    """
+    Plot mean realized return by expected carry quantile with error bars.
+    Returns the aggregated table used for plotting.
+    """
+    agg = (
+        df.groupby("q")
+          .agg(
+              n=("realized_return", "size"),
+              mean_expected=("expected_carry", "mean"),
+              mean_realized=("realized_return", "mean"),
+              std_realized=("realized_return", "std"),
+          )
+          .reset_index()
+          .sort_values("q")
+    )
+    agg["se_realized"] = agg["std_realized"] / np.sqrt(agg["n"].clip(lower=1))
+    agg["q_mid"] = agg["q"] / n_quantiles
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    ax.errorbar(
+        agg["q_mid"],
+        agg["mean_realized"],
+        yerr=1.96 * agg["se_realized"],
+        fmt="o-",
+        capsize=3,
+    )
+    ax.axhline(0.0, linewidth=1)
+    ax.set_title(title)
+    ax.set_xlabel("Expected carry quantile (within-date)")
+    ax.set_ylabel("Mean realized return (horizon)")
+    ax.set_xlim(0, 1.0)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=160)
+    plt.close(fig)
+
+    return agg
+
+
+def make_scatter_with_binned_means_and_regression(
+    df: pd.DataFrame,
+    out_path: str,
+    title: str,
+    bins: int = 20,
+) -> Tuple[float, float]:
+    """
+    Scatter of standardized expected carry (z within date) vs realized return,
+    plus binned means and an OLS regression slope on z-scored x.
+    """
+    x = df["signal_z"].to_numpy()
+    y = df["realized_return"].to_numpy()
+
+    slope, se_slope, intercept = ols_slope_with_se(x, y)
+
+    # Binned means
+    tmp = df[["signal_z", "realized_return"]].dropna().copy()
+    tmp["bin"] = pd.cut(tmp["signal_z"], bins=bins)
+    binned = tmp.groupby("bin", observed=False).agg(
+        x_mean=("signal_z", "mean"),
+        y_mean=("realized_return", "mean"),
+        n=("realized_return", "size"),
+    ).dropna()
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    ax.scatter(tmp["signal_z"], tmp["realized_return"], s=8, alpha=0.25)
+    ax.plot(binned["x_mean"], binned["y_mean"], marker="o")
+    ax.axhline(0.0, linewidth=1)
+    ax.set_title(f"{title}\nOLS slope (y ~ z(x)) = {slope:.4g} (SE {se_slope:.4g})")
+    ax.set_xlabel("Expected carry (z-score within date)")
+    ax.set_ylabel("Realized return (horizon)")
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=160)
+    plt.close(fig)
+
+    return float(slope), float(se_slope)
+
+
+def make_results_table(
+    df: pd.DataFrame,
+    quantile_agg: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    Produce a compact results table:
+    - quantile monotonicity stats
+    - global regression slopes (level + standardized)
+    - Spearman IC distribution stats
+    """
+    # Level regression (scale depends on units!)
+    slope_lvl, se_lvl, _ = ols_slope_with_se(df["expected_carry"].to_numpy(), df["realized_return"].to_numpy())
+
+    # Standardized slope: regress y on z-scored x (already signal_z)
+    slope_z, se_z, _ = ols_slope_with_se(df["signal_z"].to_numpy(), df["realized_return"].to_numpy())
+
+    ic = spearman_ic_by_date(df, "date")
+    ic_stats = {
+        "ic_mean": float(np.nanmean(ic)),
+        "ic_median": float(np.nanmedian(ic)),
+        "ic_p25": float(np.nanpercentile(ic.dropna(), 25)) if ic.dropna().size else np.nan,
+        "ic_p75": float(np.nanpercentile(ic.dropna(), 75)) if ic.dropna().size else np.nan,
+        "ic_n_dates": int(ic.dropna().size),
+    }
+
+    summary = {
+        "slope_level": slope_lvl,
+        "se_slope_level": se_lvl,
+        "slope_z": slope_z,
+        "se_slope_z": se_z,
+        **ic_stats,
+        "n_obs": int(df.shape[0]),
+        "n_dates": int(df["date"].nunique()),
+        "n_quantiles": int(quantile_agg.shape[0]),
+    }
+
+    # Put summary + quantile table into one DataFrame (stacked blocks)
+    summary_df = pd.DataFrame([summary])
+    summary_df.insert(0, "section", "GLOBAL")
+
+    q_df = quantile_agg.copy()
+    q_df.insert(0, "section", "QUANTILES")
+
+    # Align columns
+    out = pd.concat([summary_df, q_df], ignore_index=True, sort=False)
+    return out
+
+
+def df_to_markdown(df: pd.DataFrame, float_fmt: str = "{:.6g}") -> str:
+    df2 = df.copy()
+    for c in df2.columns:
+        if pd.api.types.is_numeric_dtype(df2[c]):
+            df2[c] = df2[c].map(lambda v: float_fmt.format(v) if pd.notna(v) else "")
+    return df2.to_markdown(index=False)
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--input", required=True, help="Path to input .csv or .parquet")
+    ap.add_argument("--out", required=True, help="Output directory, e.g. reports/diagnostics")
+    ap.add_argument("--n_quantiles", type=int, default=10)
+    ap.add_argument("--include_unexecuted", action="store_true")
+    args = ap.parse_args()
+
+    os.makedirs(args.out, exist_ok=True)
+
+    df = load_data(args.input)
+
+    if "executed" in df.columns and not args.include_unexecuted:
+        df = df[df["executed"] == True].copy()  # noqa: E712
+
+    # Add cross-sectional quantiles + standardized signal
+    df = add_cross_sectional_quantiles(df, "date", "expected_carry", n_quantiles=args.n_quantiles)
+
+    # Plots
+    qplot_path = os.path.join(args.out, "carry_quantile_monotonicity.png")
+    qagg = make_quantile_monotonicity_plot(
+        df,
+        out_path=qplot_path,
+        n_quantiles=args.n_quantiles,
+        title="Structural alpha diagnostic: realized return by expected-carry quantile",
+    )
+
+    scatter_path = os.path.join(args.out, "carry_scatter_binned_regression.png")
+    slope_z, se_z = make_scatter_with_binned_means_and_regression(
+        df,
+        out_path=scatter_path,
+        title="Scale-free diagnostic: realized return vs expected carry (standardized)",
+        bins=20,
+    )
+
+    # Results table
+    results = make_results_table(df, qagg)
+    csv_path = os.path.join(args.out, "alpha_diagnostics_table.csv")
+    md_path = os.path.join(args.out, "alpha_diagnostics_table.md")
+    results.to_csv(csv_path, index=False)
+    with open(md_path, "w", encoding="utf-8") as f:
+        f.write(df_to_markdown(results))
+
+    print(f"Wrote: {qplot_path}")
+    print(f"Wrote: {scatter_path}")
+    print(f"Wrote: {csv_path}")
+    print(f"Wrote: {md_path}")
+    print(f"Key slope (y ~ z(expected)): {slope_z:.6g} (SE {se_z:.6g})")
+
+
+if __name__ == "__main__":
+    main()
+
+3) Minimal tests: tests/test_alpha_diagnostics.py
+import numpy as np
+import pandas as pd
+
+from src.diagnostics.alpha_diagnostics import add_cross_sectional_quantiles, ols_slope_with_se
+
+
+def test_ols_slope_basic():
+    x = np.array([0.0, 1.0, 2.0, 3.0])
+    y = 2.0 + 3.0 * x
+    b, se, a = ols_slope_with_se(x, y)
+    assert abs(b - 3.0) < 1e-9
+    assert abs(a - 2.0) < 1e-9
+    assert se < 1e-9
+
+
+def test_quantiles_within_date():
+    df = pd.DataFrame({
+        "date": ["2025-01-01"] * 10 + ["2025-01-02"] * 10,
+        "expected_carry": list(range(10)) + list(range(10)),
+        "realized_return": list(range(10)) + list(range(10)),
+    })
+    df["date"] = pd.to_datetime(df["date"], utc=True)
+    out = add_cross_sectional_quantiles(df, "date", "expected_carry", n_quantiles=5)
+    assert out["q"].between(1, 5).all()
+    # Each date should have all quantiles represented (given 10 obs and 5 q)
+    for d, g in out.groupby("date"):
+        assert set(g["q"].unique()) == {1, 2, 3, 4, 5}
+
+4) How to run it (add to state.md)
+
+From repo root:
+
+python -m src.diagnostics.alpha_diagnostics \
+  --input data/your_alpha_frame.parquet \
+  --out reports/diagnostics \
+  --n_quantiles 10
+
+
+If you want to include unexecuted rows:
+
+python -m src.diagnostics.alpha_diagnostics \
+  --input data/your_alpha_frame.parquet \
+  --out reports/diagnostics \
+  --include_unexecuted
+
+Choosing: carry-scaled return vs t-stat (what I’d do)
+
+Use both, but declare one as primary.
+
+Primary (for “is there structural alpha?”): Quantile monotonicity + t-stats
+
+It’s scale-free
+
+It’s the cleanest “alpha exists?” diagnostic without portfolio choices
+
+Reviewers trust it
+
+Secondary (for “is it calibrated economically?”): carry-scaled return
+
+Dimensionless and intuitive (“did we realize the carry we predicted?”)
+
+But can blow up when expected carry is near 0 → you’ll need a prereg rule for exclusions/clipping
+
+If you want one: pick t-stat / monotonicity as the structural-alpha gate, and keep carry-scaled as calibration.

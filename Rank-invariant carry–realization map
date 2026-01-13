@@ -1,0 +1,222 @@
+The correct first visualization: Rank-invariant carry–realization map
+Core idea
+
+You want to test monotonicity, not magnitude.
+
+So you visualize:
+
+Expected carry → as a rank or standardized score
+
+Realized excess return → normalized by horizon volatility or carry scale
+
+This answers:
+
+Is higher expected carry → higher realized outcome?
+
+Without relying on portfolio sizing, leverage, or scale?
+
+1️⃣ Primary plot: Quantile monotonicity plot (gold standard)
+What to plot
+
+X-axis: Expected carry rank (e.g. deciles or ventiles)
+
+Y-axis: Mean realized excess return (or t-stat) over horizon
+
+Each point is:
+
+“Bonds in carry quantile q → average realized outcome”
+
+Why this is invariant
+
+Ranks eliminate scale
+
+No portfolio weights
+
+No leverage
+
+No distributional assumptions
+
+Interpretation
+
+Upward sloping → carry has alpha content
+
+Flat → no signal
+
+Non-monotone / hump-shaped → selection bias or execution effects
+
+Downward → carry is misleading (reject)
+
+Reviewer-safe framing
+
+“We evaluate whether ex-ante carry induces a monotone ordering of realized outcomes.”
+
+📍 This should be your Figure 1.
+
+2️⃣ Normalize the Y-axis properly (critical)
+
+You have two correct choices. Pick one and lock it.
+
+Option A (preferred): Carry-scaled return
+𝑌
+=
+𝑅
+𝑖
+,
+𝑡
+:
+𝑡
++
+Δ
+ExpectedCarry
+𝑖
+,
+𝑡
+Y=
+ExpectedCarry
+i,t
+	​
+
+R
+i,t:t+Δ
+	​
+
+	​
+
+
+Interpretation:
+
+1.0 → realized matches expectation
+
+<0 → carry misleading
+
+1 → conservative carry estimate
+
+This is dimensionless and intuitive.
+
+Option B: t-stat per bucket
+𝑌
+=
+𝑅
+ˉ
+SE
+(
+𝑅
+ˉ
+)
+Y=
+SE(
+R
+ˉ
+)
+R
+ˉ
+	​
+
+
+Interpretation:
+
+Direct statistical strength
+
+Scale-free
+
+Very reviewer-friendly
+
+3️⃣ What NOT to do (important)
+
+Do not plot:
+
+Expected carry vs realized levels
+
+Scatter with raw values (heteroskedastic, misleading)
+
+Portfolio PnL
+
+Cumulative curves
+
+Those all bake in scale choices you explicitly want to avoid.
+
+4️⃣ Optional but powerful: Calibration plot
+
+This is your second diagnostic.
+
+Plot
+
+X-axis: Expected carry (rank-normalized)
+
+Y-axis: Realized carry component only (not total return)
+
+Add:
+
+45° reference line
+
+Interpretation:
+
+Slope ≈ 1 → well-calibrated carry
+
+Slope < 1 → decay / slippage
+
+Slope > 1 → conservative model
+
+This directly supports your:
+
+“carry explains ≥ 40% of return” criterion
+
+5️⃣ One plot that kills most objections (if you want to be surgical)
+Rank IC over time
+
+Compute Spearman rank correlation between expected carry and realized return per rebalance
+
+Plot distribution (boxplot or histogram)
+
+Why it’s lethal:
+
+Scale-free
+
+No portfolio construction
+
+No distributional assumptions
+
+Time-local (no look-ahead accusations)
+
+If median IC > 0 and stable → alpha exists.
+
+6️⃣ How to label it (words matter)
+
+Use language like:
+
+“Monotone ordering test”
+
+“Rank-based validation”
+
+“Scale-free diagnostic”
+
+“Execution-aware realized returns”
+
+Avoid:
+
+“Performance”
+
+“Profitability”
+
+“Strategy returns”
+
+7️⃣ Where this lives in your repo
+reports/
+└── diagnostics/
+    ├── carry_quantile_monotonicity.png   ← FIRST FIGURE
+    ├── carry_calibration.png
+    └── rank_ic_distribution.png
+
+8️⃣ One-sentence takeaway to remember
+
+Alpha at this stage is monotonicity, not money.
+
+If expected carry doesn’t order realized outcomes without scale, the strategy is dead before portfolio construction even enters the room.
+
+If you want, next I can:
+
+write the exact plotting code (pandas + matplotlib, no seaborn)
+
+help you choose between carry-scaled return vs t-stat
+
+or help you phrase the JFDS-style caption that preempts reviewer attacks

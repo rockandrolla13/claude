@@ -1,0 +1,944 @@
+# Part IV: Falsifiable Hypotheses & Pre-Registration Protocol
+
+## 16. Hypothesis Testing Framework
+
+### 16.1 Philosophy of Pre-Registration
+
+This section defines a set of **falsifiable hypotheses** that must be tested before proceeding with live implementation. Each hypothesis has:
+
+1. **Null Hypothesis (H₀)**: The skeptical position (no effect)
+2. **Alternative Hypothesis (H₁)**: The position we hope to confirm
+3. **Test Statistic**: How we measure the effect
+4. **GO Criterion**: Threshold for proceeding
+5. **NO-GO Criterion**: Threshold for abandoning
+6. **INCONCLUSIVE Zone**: Results requiring additional investigation
+
+**Critical Principle**: We pre-commit to these criteria BEFORE running the tests. This prevents p-hacking and data snooping.
+
+---
+
+## 17. Primary Hypotheses: Does Carry Predict Returns?
+
+### 17.1 Hypothesis H1: Raw Carry Predictability
+
+**Research Question**: Does net carry (OAS × Duration - Funding Cost) predict future bond returns?
+
+$$
+H_0: \beta = 0 \quad \text{vs} \quad H_1: \beta > 0
+$$
+
+In the regression:
+$$
+r_{i,t+1} = \alpha + \beta \cdot C_{i,t} + \epsilon_{i,t+1}
+$$
+
+| Criterion | Threshold | Action |
+|-----------|-----------|--------|
+| **GO** | $t(\beta) > 1.96$ AND $\beta > 0$ | Proceed with carry signal |
+| **NO-GO** | $t(\beta) < 1.28$ OR $\beta < 0$ | Abandon carry strategy |
+| **INCONCLUSIVE** | $1.28 \leq t(\beta) \leq 1.96$ | Extend sample, add controls |
+
+**Diagnostic Output**: `reports/H1_raw_carry_predictability.md`
+
+---
+
+### 17.2 Hypothesis H2: Carry Normalization Comparison
+
+**Research Question**: What is the optimal way to normalize carry for cross-sectional comparison?
+
+We test four normalization schemes:
+
+| Variant | Formula | Rationale |
+|---------|---------|-----------|
+| **H2a**: Raw | $C_{i,t} = \text{OAS}_i \times D_i - r_f \times D_i$ | Baseline |
+| **H2b**: OAS-normalized | $C_{i,t}^{norm} = \frac{C_{i,t}}{\text{OAS}_i}$ | Control for spread level |
+| **H2c**: Vol-normalized | $C_{i,t}^{vol} = \frac{C_{i,t}}{\sigma_i}$ | Risk-adjusted carry |
+| **H2d**: OAS×Vol-normalized | $C_{i,t}^{ov} = \frac{C_{i,t}}{\text{OAS}_i \times \sigma_i}$ | Double normalization |
+
+**Test Procedure**:
+
+For each normalization $k \in \{a, b, c, d\}$:
+
+1. Construct XS portfolio using normalized signal
+2. Compute Sharpe ratio: $SR_k$
+3. Compute information ratio vs. raw: $IR_k = \frac{\alpha_k}{\sigma(\epsilon_k)}$
+
+**Comparison Metric**:
+$$
+\Delta SR_k = SR_k - SR_{raw}
+$$
+
+| Criterion | Threshold | Action |
+|-----------|-----------|--------|
+| **GO (Alternative)** | $\Delta SR_k > 0.10$ AND $t(\Delta SR) > 1.65$ | Adopt normalization $k$ |
+| **GO (Raw)** | $\max_k \Delta SR_k < 0.05$ | Keep raw carry |
+| **INCONCLUSIVE** | $0.05 \leq \max_k \Delta SR_k \leq 0.10$ | Report both, investigate |
+
+**Diagnostic Output**: `reports/H2_normalization_comparison.md`
+
+---
+
+### 17.3 Hypothesis H3: Spread Decomposition (PD × LGD)
+
+**Research Question**: Is carry return driven by compensation for actual default risk (PD × LGD) or by mispricing/technical factors?
+
+**Theoretical Background**: 
+
+Under risk-neutral pricing, OAS should equal expected loss:
+$$
+\text{OAS} \approx \text{PD} \times \text{LGD} + \text{Liquidity Premium} + \text{Risk Premium}
+$$
+
+If carry returns are purely compensation for realized defaults, then:
+$$
+H_0: \text{Carry Return} = \text{Default Losses} \quad (\text{No excess return})
+$$
+
+**Test Design**:
+
+#### Step 1: Decompose OAS
+```
+OAS_i = PD_i × LGD_i + Residual_i
+
+Where:
+- PD_i = Probability of default (from CDS or rating-implied)
+- LGD_i = Loss given default (typically 60% for senior unsecured)
+- Residual_i = Non-default spread component
+```
+
+#### Step 2: Construct Alternative Carry Signals
+
+| Signal | Formula | What It Captures |
+|--------|---------|------------------|
+| **Total Carry** | $\text{OAS} \times D$ | All spread risk |
+| **Default Carry** | $(\text{PD} \times \text{LGD}) \times D$ | Pure default risk |
+| **Residual Carry** | $\text{Residual} \times D$ | Non-default premium |
+
+#### Step 3: Regression Test
+
+$$
+r_{i,t+1} = \alpha + \beta_1 \cdot C_{i,t}^{Default} + \beta_2 \cdot C_{i,t}^{Residual} + \epsilon_{i,t+1}
+$$
+
+| Criterion | Condition | Interpretation | Action |
+|-----------|-----------|----------------|--------|
+| **GO (Residual-driven)** | $\beta_2 > 0$, $t(\beta_2) > 1.96$, $\beta_2 > \beta_1$ | Non-default spread predicts returns | Carry captures risk premium beyond default |
+| **GO (Default-driven)** | $\beta_1 > 0$, $t(\beta_1) > 1.96$, $\beta_1 > \beta_2$ | Default spread predicts returns | Carry is default risk compensation |
+| **NO-GO** | Both $\beta_1, \beta_2$ insignificant | Neither component works | Reconsider strategy |
+| **INCONCLUSIVE** | Mixed significance | Partial effect | Investigate further |
+
+**Diagnostic Output**: `reports/H3_spread_decomposition.md`
+
+---
+
+## 18. Anti-Tilt Hypotheses: Testing for Spurious Effects
+
+### 18.1 Hypothesis H4: Duration Tilt (Anti-Hypothesis)
+
+**Research Question**: Is carry return simply a disguised duration bet?
+
+**Concern**: Since $\text{Carry} = \text{OAS} \times D - r_f \times D = (\text{OAS} - r_f) \times D$, high-carry bonds may simply be long-duration bonds. In a falling rate environment, this would generate spurious outperformance.
+
+**Null Hypothesis (Skeptical)**:
+$$
+H_0: \text{Carry strategy} = \text{Duration strategy} \quad (\text{No independent effect})
+$$
+
+**Test Design**:
+
+#### Test 4a: Duration-Neutral Carry
+
+Construct duration-neutral carry portfolio:
+
+1. Compute duration exposure: $\text{DurationExp} = \sum_i w_i \times D_i$
+2. Hedge with Treasury futures to achieve $\text{DurationExp} = 0$
+3. Compare hedged vs. unhedged Sharpe ratios
+
+| Criterion | Threshold | Action |
+|-----------|-----------|--------|
+| **GO** | $SR_{hedged} > 0.2$ AND $SR_{hedged} / SR_{unhedged} > 0.5$ | Carry has independent value |
+| **NO-GO** | $SR_{hedged} < 0$ OR $SR_{hedged} / SR_{unhedged} < 0.3$ | Carry is duration in disguise |
+| **INCONCLUSIVE** | $0 < SR_{hedged} < 0.2$ | Partial duration effect |
+
+#### Test 4b: Fama-MacBeth with Duration Control
+
+$$
+r_{i,t+1} = \alpha + \beta_1 \cdot C_{i,t} + \beta_2 \cdot D_{i,t} + \epsilon_{i,t+1}
+$$
+
+| Criterion | Condition | Action |
+|-----------|-----------|--------|
+| **GO** | $\beta_1 > 0$, $t(\beta_1) > 1.96$ after controlling for duration | Carry is not duration tilt |
+| **NO-GO** | $\beta_1$ insignificant after adding $D_{i,t}$ | Carry is duration tilt |
+
+**Diagnostic Output**: `reports/H4_duration_tilt_test.md`
+
+---
+
+### 18.2 Hypothesis H5: Rating Tilt (Anti-Hypothesis)
+
+**Research Question**: Is carry return simply a disguised credit quality bet?
+
+**Concern**: High OAS bonds are typically lower-rated (BBB vs. A). Carry strategy may just be going long BBB / short A, which is a known risk premium.
+
+**Null Hypothesis (Skeptical)**:
+$$
+H_0: \text{Carry strategy} = \text{Rating strategy} \quad (\text{No independent effect})
+$$
+
+**Test Design**:
+
+#### Test 5a: Rating-Neutral Carry
+
+Construct rating-neutral XS carry:
+
+1. Within each rating bucket (AAA, AA, A, BBB), construct XS portfolio
+2. Combine rating-specific portfolios with equal risk weights
+3. Compare to unconstrained XS carry
+
+| Criterion | Threshold | Action |
+|-----------|-----------|--------|
+| **GO** | $SR_{rating-neutral} > 0.2$ AND correlation with rating factor < 0.3 | Carry has independent value |
+| **NO-GO** | $SR_{rating-neutral} < 0$ OR correlation with rating factor > 0.7 | Carry is rating in disguise |
+
+#### Test 5b: Fama-MacBeth with Rating Dummies
+
+$$
+r_{i,t+1} = \alpha + \beta \cdot C_{i,t} + \sum_{k} \gamma_k \cdot \mathbb{1}_{Rating_i = k} + \epsilon_{i,t+1}
+$$
+
+| Criterion | Condition | Action |
+|-----------|-----------|--------|
+| **GO** | $\beta > 0$, $t(\beta) > 1.96$ after rating controls | Carry is not rating tilt |
+| **NO-GO** | $\beta$ insignificant after rating controls | Carry is rating tilt |
+
+**Diagnostic Output**: `reports/H5_rating_tilt_test.md`
+
+---
+
+### 18.3 Hypothesis H6: Sector Tilt (Anti-Hypothesis)
+
+**Research Question**: Is carry return driven by persistent sector bets?
+
+**Concern**: Certain sectors (e.g., Financials, Energy) may have systematically higher spreads. Carry strategy may be a disguised sector allocation.
+
+**Test Design**:
+
+#### Test 6a: Sector-Neutral Carry
+
+1. Within each GICS sector, construct XS portfolio
+2. Combine with equal risk weights
+3. Compare to unconstrained XS carry
+
+#### Test 6b: Sector Exposure Analysis
+
+Compute time-series of sector weights in carry portfolio:
+$$
+w_{sector,t} = \sum_{i \in sector} w_{i,t}
+$$
+
+| Criterion | Threshold | Action |
+|-----------|-----------|--------|
+| **GO** | Max sector weight < 30% AND sector weights mean-reverting | Diversified carry |
+| **CAUTION** | Max sector weight > 40% | Concentrated sector bet |
+| **NO-GO** | Single sector > 50% weight persistently | Carry is sector bet |
+
+**Diagnostic Output**: `reports/H6_sector_tilt_test.md`
+
+---
+
+### 18.4 Hypothesis H7: Liquidity Tilt (Anti-Hypothesis)
+
+**Research Question**: Is carry return compensation for holding illiquid bonds?
+
+**Concern**: High OAS may reflect illiquidity premium, not credit risk premium. Strategy may be harvesting illiquidity risk.
+
+**Liquidity Proxies**:
+- Issue size (larger = more liquid)
+- Age since issuance (newer = more liquid)
+- Bid-ask spread (if available)
+- Trading volume (if available)
+
+**Test Design**:
+
+$$
+r_{i,t+1} = \alpha + \beta_1 \cdot C_{i,t} + \beta_2 \cdot \text{Illiquidity}_{i,t} + \epsilon_{i,t+1}
+$$
+
+| Criterion | Condition | Action |
+|-----------|-----------|--------|
+| **GO** | $\beta_1 > 0$ significant after liquidity control | Carry is not illiquidity |
+| **ACCEPTABLE** | Both $\beta_1, \beta_2 > 0$ significant | Carry partially captures liquidity premium |
+| **NO-GO** | $\beta_1$ insignificant after liquidity control | Carry is illiquidity in disguise |
+
+**Diagnostic Output**: `reports/H7_liquidity_tilt_test.md`
+
+---
+
+## 19. Strategy Comparison Hypotheses
+
+### 19.1 Hypothesis H8: XS vs. TS Comparison
+
+**Research Question**: Which strategy construction is superior?
+
+**Test Design**: Paired comparison of XS and TS portfolios
+
+| Metric | XS Portfolio | TS Portfolio | Comparison |
+|--------|--------------|--------------|------------|
+| Sharpe Ratio | $SR_{XS}$ | $SR_{TS}$ | $\Delta SR = SR_{XS} - SR_{TS}$ |
+| Sortino Ratio | $Sortino_{XS}$ | $Sortino_{TS}$ | $\Delta Sortino$ |
+| Max Drawdown | $MDD_{XS}$ | $MDD_{TS}$ | $\Delta MDD$ |
+| Skewness | $Skew_{XS}$ | $Skew_{TS}$ | $\Delta Skew$ |
+
+**Statistical Test**: Ledoit-Wolf test for Sharpe ratio difference
+
+$$
+H_0: SR_{XS} = SR_{TS} \quad \text{vs} \quad H_1: SR_{XS} \neq SR_{TS}
+$$
+
+| Criterion | Condition | Action |
+|-----------|-----------|--------|
+| **GO (XS)** | $SR_{XS} > SR_{TS} + 0.1$ AND $p < 0.10$ | Prefer XS |
+| **GO (TS)** | $SR_{TS} > SR_{XS} + 0.1$ AND $p < 0.10$ | Prefer TS |
+| **GO (Both)** | $|SR_{XS} - SR_{TS}| < 0.1$ AND both $> 0.3$ | Use both (diversification) |
+| **NO-GO** | Both $SR < 0.2$ | Neither strategy viable |
+
+**Correlation Analysis**:
+$$
+\rho(r_{XS}, r_{TS})
+$$
+
+| Criterion | Threshold | Implication |
+|-----------|-----------|-------------|
+| $\rho < 0.5$ | Low correlation | Strong diversification benefit |
+| $0.5 \leq \rho < 0.8$ | Moderate | Some diversification |
+| $\rho \geq 0.8$ | High | Choose one, not both |
+
+**Diagnostic Output**: `reports/H8_xs_vs_ts_comparison.md`
+
+---
+
+### 19.2 Hypothesis H9: Sector-Specific Carry Efficacy
+
+**Research Question**: Does carry work uniformly across sectors, or are some sectors better than others?
+
+**Test Design**: Run carry strategy separately within each major sector
+
+| Sector | XS Sharpe | TS Sharpe | GO/NO-GO |
+|--------|-----------|-----------|----------|
+| Financials | $SR_{Fin}$ | | |
+| Industrials | $SR_{Ind}$ | | |
+| Utilities | $SR_{Util}$ | | |
+| Technology | $SR_{Tech}$ | | |
+| Healthcare | $SR_{Health}$ | | |
+| Energy | $SR_{Energy}$ | | |
+| Consumer | $SR_{Cons}$ | | |
+
+**Sector-Specific Criteria**:
+
+| Criterion | Condition | Action |
+|-----------|-----------|--------|
+| **GO (Sector)** | $SR_{sector} > 0.25$ | Include sector in strategy |
+| **NO-GO (Sector)** | $SR_{sector} < 0$ | Exclude sector |
+| **INCONCLUSIVE** | $0 < SR_{sector} < 0.25$ | Include with lower weight |
+
+**Cross-Sector Test**:
+$$
+H_0: SR_{sector_1} = SR_{sector_2} \quad \forall \text{ sector pairs}
+$$
+
+**Diagnostic Output**: `reports/H9_sector_efficacy.md`
+
+---
+
+### 19.3 Hypothesis H10: Rating-Specific Carry Efficacy
+
+**Research Question**: Does carry work uniformly across rating categories?
+
+**Test Design**: Run carry strategy separately within each rating bucket
+
+| Rating | XS Sharpe | Observations | GO/NO-GO |
+|--------|-----------|--------------|----------|
+| AAA/AA | $SR_{AA}$ | $N_{AA}$ | |
+| A | $SR_{A}$ | $N_A$ | |
+| BBB+ | $SR_{BBB+}$ | $N_{BBB+}$ | |
+| BBB | $SR_{BBB}$ | $N_{BBB}$ | |
+| BBB- | $SR_{BBB-}$ | $N_{BBB-}$ | |
+
+**Key Hypothesis**: 
+$$
+H_0: SR_{BBB} = SR_{A} \quad \text{vs} \quad H_1: SR_{BBB} > SR_{A}
+$$
+
+(We expect carry to work better in lower-rated IG due to higher spread dispersion)
+
+| Criterion | Condition | Action |
+|-----------|-----------|--------|
+| **GO** | $SR_{BBB} > SR_{A} > 0$ | Confirms spread premium hypothesis |
+| **SURPRISE** | $SR_{A} > SR_{BBB}$ | Investigate; may indicate default risk |
+| **NO-GO** | $SR_{BBB} < 0$ | BBB carry not viable |
+
+**Diagnostic Output**: `reports/H10_rating_efficacy.md`
+
+---
+
+## 20. Skewness Enhancement Hypotheses
+
+### 20.1 Hypothesis H11: Standalone Skewness Predictability
+
+**Research Question**: Does realized skewness predict future bond returns (independent of carry)?
+
+$$
+r_{i,t+1} = \alpha + \beta \cdot (-\widehat{Skew}_{i,t}) + \epsilon_{i,t+1}
+$$
+
+Note: Negative sign because more negative skew → higher expected return.
+
+| Criterion | Condition | Action |
+|-----------|-----------|--------|
+| **GO** | $\beta > 0$, $t(\beta) > 1.96$ | Skewness is independent predictor |
+| **NO-GO** | $\beta \leq 0$ OR $t(\beta) < 1.28$ | Skewness not useful |
+| **INCONCLUSIVE** | $\beta > 0$, $1.28 < t(\beta) < 1.96$ | Weak evidence, needs more data |
+
+**Diagnostic Output**: `reports/H11_skewness_predictability.md`
+
+---
+
+### 20.2 Hypothesis H12: Skewness Adds Value to Carry
+
+**Research Question**: Does adding skewness to carry improve risk-adjusted returns?
+
+**Test Design**: Compare three portfolios
+
+1. **Carry-only**: XS portfolio ranked by carry
+2. **Skewness-only**: XS portfolio ranked by negative skewness
+3. **Combined**: XS portfolio ranked by $\lambda \cdot z(C) + (1-\lambda) \cdot z(-Skew)$
+
+**Optimal Lambda Search**:
+Test $\lambda \in \{0.3, 0.5, 0.7\}$
+
+**Metrics**:
+
+| Portfolio | Sharpe | Sortino | Max DD |
+|-----------|--------|---------|--------|
+| Carry-only | $SR_C$ | $Sort_C$ | $MDD_C$ |
+| Skewness-only | $SR_S$ | $Sort_S$ | $MDD_S$ |
+| Combined ($\lambda=0.5$) | $SR_{Comb}$ | $Sort_{Comb}$ | $MDD_{Comb}$ |
+
+**Decision Criteria**:
+
+| Criterion | Condition | Action |
+|-----------|-----------|--------|
+| **GO (Combined)** | $SR_{Comb} > SR_C + 0.05$ AND $SR_{Comb} > SR_S$ | Use combined signal |
+| **GO (Carry-only)** | $SR_C > SR_{Comb}$ AND $SR_C > SR_S$ | Skewness adds no value |
+| **GO (Skewness-only)** | $SR_S > SR_C$ AND $SR_S > SR_{Comb}$ | Skewness dominates carry |
+| **NO-GO** | All $SR < 0.2$ | Neither signal viable |
+
+**Diagnostic Output**: `reports/H12_skewness_enhancement.md`
+
+---
+
+### 20.3 Hypothesis H13: Mean-Variance Spanning (Formal Test)
+
+**Research Question**: Does skewness expand the efficient frontier beyond carry?
+
+**Test**: Huberman-Kandel (1987) spanning test
+
+$$
+H_0: \alpha = 0 \text{ AND } \sum_i \beta_i = 1
+$$
+
+In regression:
+$$
+r_t^{Skew} = \alpha + \beta_1 \cdot r_t^{Carry} + \beta_2 \cdot r_t^{Momentum} + \epsilon_t
+$$
+
+**GMM Wald Statistic**:
+$$
+W = T \cdot \begin{pmatrix} \hat{\alpha} \\ \sum \hat{\beta} - 1 \end{pmatrix}' \hat{V}^{-1} \begin{pmatrix} \hat{\alpha} \\ \sum \hat{\beta} - 1 \end{pmatrix} \sim \chi^2(2)
+$$
+
+| Criterion | Condition | Action |
+|-----------|-----------|--------|
+| **GO** | Reject $H_0$ at $p < 0.05$ | Skewness expands frontier |
+| **NO-GO** | Fail to reject $H_0$ at $p > 0.10$ | Skewness is spanned |
+| **INCONCLUSIVE** | $0.05 < p < 0.10$ | Marginal evidence |
+
+**Diagnostic Output**: `reports/H13_spanning_test.md`
+
+---
+
+## 21. Risk Hypotheses
+
+### 21.1 Hypothesis H14: Crash Risk Exposure
+
+**Research Question**: Is carry return compensation for crash risk?
+
+Following Baltas (2017), test exposure to:
+
+#### Test 14a: Equity Crash Risk
+
+$$
+r_t^{Carry} = \alpha + \beta \cdot r_t^{SPX} + \gamma \cdot r_t^{SPX,down} + \epsilon_t
+$$
+
+Where $r_t^{SPX,down} = -r_t^{SPX} \cdot \mathbb{1}_{r_t^{SPX} < 0}$
+
+| Criterion | Condition | Interpretation |
+|-----------|-----------|----------------|
+| $\gamma < 0$, significant | Negative downside beta | Carry suffers in equity crashes |
+| $\gamma \approx 0$ | No downside exposure | Carry is crash-neutral |
+| $\gamma > 0$, significant | Positive downside beta | Carry hedges equity crashes |
+
+#### Test 14b: Credit Crash Risk
+
+$$
+r_t^{Carry} = \alpha + \beta \cdot r_t^{CDX} + \gamma \cdot r_t^{CDX,down} + \epsilon_t
+$$
+
+#### Test 14c: Volatility Risk
+
+$$
+r_t^{Carry} = \alpha + \beta \cdot r_t^{MKT} + \phi \cdot \Delta VIX_t + \epsilon_t
+$$
+
+| Criterion | Condition | Action |
+|-----------|-----------|--------|
+| **ACCEPTABLE** | $\gamma$ or $\phi$ mildly negative | Carry has some crash exposure (expected) |
+| **CAUTION** | $\gamma < -0.5$ or $\phi < -0.1$ | High crash sensitivity |
+| **GO** | Sharpe > 0.3 despite crash exposure | Carry compensates for risk |
+| **NO-GO** | Crash exposure without adequate Sharpe | Risk not compensated |
+
+**Diagnostic Output**: `reports/H14_crash_risk.md`
+
+---
+
+### 21.2 Hypothesis H15: Tail Risk Distribution
+
+**Research Question**: What is the tail risk profile of the carry strategy?
+
+**Metrics**:
+
+| Metric | Formula | Threshold |
+|--------|---------|-----------|
+| Skewness | $\frac{1}{T}\sum\left(\frac{r_t - \mu}{\sigma}\right)^3$ | < -0.5 is concerning |
+| Kurtosis | $\frac{1}{T}\sum\left(\frac{r_t - \mu}{\sigma}\right)^4$ | > 4 is fat-tailed |
+| VaR (5%) | 5th percentile of returns | |
+| CVaR (5%) | Mean of returns below VaR | |
+| Max Drawdown | Largest peak-to-trough | < 20% preferred |
+
+**Decision Matrix**:
+
+| Skewness | Kurtosis | Max DD | Assessment | Action |
+|----------|----------|--------|------------|--------|
+| > -0.3 | < 4 | < 15% | Benign | GO |
+| -0.3 to -0.7 | 4-6 | 15-25% | Moderate risk | GO with position limits |
+| < -0.7 | > 6 | > 25% | High tail risk | Require risk overlay |
+
+**Diagnostic Output**: `reports/H15_tail_risk.md`
+
+---
+
+## 22. Summary Decision Matrix
+
+### 22.1 Master GO/NO-GO Table
+
+| Hypothesis | Test | GO Threshold | NO-GO Threshold | Priority |
+|------------|------|--------------|-----------------|----------|
+| H1 | Raw carry predictability | $t > 1.96$, $\beta > 0$ | $t < 1.28$ or $\beta < 0$ | **CRITICAL** |
+| H2 | Normalization | Best $SR$ | - | Medium |
+| H3 | PD×LGD decomposition | $\beta_{residual}$ significant | Neither significant | Medium |
+| H4 | Duration tilt | $SR_{hedged} > 0.2$ | $SR_{hedged} < 0$ | **CRITICAL** |
+| H5 | Rating tilt | $\beta$ significant after controls | $\beta$ insignificant | **CRITICAL** |
+| H6 | Sector tilt | Max sector < 30% | Single sector > 50% | High |
+| H7 | Liquidity tilt | $\beta$ significant after controls | $\beta$ insignificant | High |
+| H8 | XS vs TS | At least one $SR > 0.3$ | Both $SR < 0.2$ | **CRITICAL** |
+| H9 | Sector efficacy | Most sectors $SR > 0$ | Majority $SR < 0$ | Medium |
+| H10 | Rating efficacy | BBB works | BBB $SR < 0$ | High |
+| H11 | Skewness standalone | $t > 1.96$ | $\beta < 0$ | Medium |
+| H12 | Skewness enhancement | $SR_{comb} > SR_C + 0.05$ | $SR_{comb} < SR_C$ | Medium |
+| H13 | Spanning test | Reject $H_0$ | Fail to reject | Low |
+| H14 | Crash risk | Sharpe compensates | High exposure, low Sharpe | High |
+| H15 | Tail risk | Skew > -0.7 | Skew < -1.0, MDD > 30% | High |
+
+### 22.2 Sequential Gate Structure
+
+```
+                    ┌─────────────────┐
+                    │  START          │
+                    └────────┬────────┘
+                             │
+                             ▼
+                    ┌─────────────────┐
+              NO    │  H1: Carry      │    NO
+         ◄──────────┤  Predictable?   ├──────────►  STOP
+                    └────────┬────────┘
+                             │ YES
+                             ▼
+              ┌──────────────┴──────────────┐
+              │                             │
+              ▼                             ▼
+     ┌─────────────────┐           ┌─────────────────┐
+     │  H4: Duration   │           │  H5: Rating     │
+     │  Tilt Test      │           │  Tilt Test      │
+     └────────┬────────┘           └────────┬────────┘
+              │                             │
+              ▼                             ▼
+         PASS/FAIL                     PASS/FAIL
+              │                             │
+              └──────────────┬──────────────┘
+                             │
+                             ▼
+                    ┌─────────────────┐
+              NO    │  Both Pass?     │    
+         ◄──────────┤                 ├──────────►  STOP
+                    └────────┬────────┘
+                             │ YES
+                             ▼
+                    ┌─────────────────┐
+                    │  H8: XS vs TS   │
+                    │  Comparison     │
+                    └────────┬────────┘
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │  Select Best    │
+                    │  or Both        │
+                    └────────┬────────┘
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │  H14/H15: Risk  │
+                    │  Assessment     │
+                    └────────┬────────┘
+                             │
+                             ▼
+                    ┌─────────────────┐
+              NO    │  Risk           │
+         ◄──────────┤  Acceptable?    ├──────────►  STOP
+                    └────────┬────────┘
+                             │ YES
+                             ▼
+                    ┌─────────────────┐
+                    │  H11-13:        │
+                    │  Skewness       │
+                    │  Enhancement    │
+                    └────────┬────────┘
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │  Final Strategy │
+                    │  Selection      │
+                    └─────────────────┘
+```
+
+### 22.3 Minimum Viable Strategy Criteria
+
+**To proceed to paper trading, ALL of the following must be met:**
+
+| Gate | Criterion | Measured By |
+|------|-----------|-------------|
+| **Gate 1** | Carry predicts returns | H1: $t(\beta) > 1.96$ |
+| **Gate 2** | Not a duration bet | H4: $SR_{hedged} > 0.2$ |
+| **Gate 3** | Not a rating bet | H5: $\beta$ significant after controls |
+| **Gate 4** | Economically significant | H8: At least one strategy $SR > 0.3$ |
+| **Gate 5** | Acceptable tail risk | H15: Skew > -0.7, MDD < 25% |
+
+**To add skewness enhancement:**
+
+| Gate | Criterion | Measured By |
+|------|-----------|-------------|
+| **Gate 6** | Skewness improves Sharpe | H12: $SR_{comb} > SR_{carry} + 0.05$ |
+| **Gate 7** | Expands efficient frontier | H13: Spanning test rejects $H_0$ |
+
+---
+
+## 23. Implementation Checklist
+
+### 23.1 Pre-Analysis Commitment
+
+Before running any tests, document and commit to:
+
+```yaml
+# prereg_hypotheses.yaml
+
+commitment_date: "YYYY-MM-DD"
+analyst: "Name"
+
+hypotheses:
+  H1_carry_predictability:
+    go_threshold: "t > 1.96 AND beta > 0"
+    nogo_threshold: "t < 1.28 OR beta < 0"
+    committed: true
+    
+  H4_duration_tilt:
+    go_threshold: "SR_hedged > 0.2"
+    nogo_threshold: "SR_hedged < 0"
+    committed: true
+    
+  # ... etc for all hypotheses
+
+analysis_plan:
+  - Run H1 first
+  - If H1 passes, run H4 and H5 in parallel
+  - If H4 AND H5 pass, run H8
+  - Continue per sequential gate structure
+  
+data_freeze_date: "YYYY-MM-DD"
+no_changes_after_freeze: true
+```
+
+### 23.2 Results Documentation Template
+
+For each hypothesis, document:
+
+```markdown
+# Hypothesis Hx: [Title]
+
+## Pre-Registered Criteria
+- GO: [threshold]
+- NO-GO: [threshold]
+
+## Data Used
+- Sample period: [start] to [end]
+- Number of observations: [N]
+- Universe: [description]
+
+## Results
+- Test statistic: [value]
+- p-value: [value]
+- Point estimate: [value]
+- Confidence interval: [lower, upper]
+
+## Decision
+- [ ] GO
+- [ ] NO-GO
+- [ ] INCONCLUSIVE
+
+## Notes
+[Any relevant observations or caveats]
+```
+
+---
+
+## 24. Diagnostic Test Code Structure
+
+### 24.1 Test Module Organization
+
+```
+src/validation/
+├── __init__.py
+├── hypothesis_tests/
+│   ├── __init__.py
+│   ├── h01_carry_predictability.py
+│   ├── h02_normalization.py
+│   ├── h03_spread_decomposition.py
+│   ├── h04_duration_tilt.py
+│   ├── h05_rating_tilt.py
+│   ├── h06_sector_tilt.py
+│   ├── h07_liquidity_tilt.py
+│   ├── h08_xs_vs_ts.py
+│   ├── h09_sector_efficacy.py
+│   ├── h10_rating_efficacy.py
+│   ├── h11_skewness_standalone.py
+│   ├── h12_skewness_enhancement.py
+│   ├── h13_spanning_test.py
+│   ├── h14_crash_risk.py
+│   └── h15_tail_risk.py
+├── utils/
+│   ├── statistical_tests.py  # Fama-MacBeth, Newey-West, etc.
+│   ├── spanning_tests.py     # Huberman-Kandel
+│   └── bootstrap.py          # Bootstrap confidence intervals
+└── run_all_hypotheses.py     # Master runner with gate logic
+```
+
+### 24.2 Standard Test Function Signature
+
+```python
+def test_hypothesis_hX(
+    data: pd.DataFrame,
+    params: dict,
+    output_dir: str = "reports/"
+) -> HypothesisResult:
+    """
+    Test Hypothesis HX: [Description]
+    
+    Parameters
+    ----------
+    data : pd.DataFrame
+        Input data with required columns
+    params : dict
+        Test parameters (thresholds, etc.)
+    output_dir : str
+        Directory for output report
+        
+    Returns
+    -------
+    HypothesisResult
+        Named tuple with fields:
+        - hypothesis_id: str
+        - test_statistic: float
+        - p_value: float
+        - point_estimate: float
+        - ci_lower: float
+        - ci_upper: float
+        - decision: str  # 'GO', 'NO-GO', 'INCONCLUSIVE'
+        - details: dict  # Additional test-specific outputs
+    """
+    pass
+```
+
+---
+
+## Appendix C: Statistical Test Implementations
+
+### C.1 Fama-MacBeth Regression
+
+```python
+def fama_macbeth_regression(
+    data: pd.DataFrame,
+    y_col: str,
+    x_cols: List[str],
+    date_col: str = 'as_of_date'
+) -> FamaMacBethResult:
+    """
+    Run Fama-MacBeth two-stage regression.
+    
+    Stage 1: Cross-sectional regression at each date
+    Stage 2: Time-series average of coefficients
+    
+    Standard errors: Newey-West with automatic lag selection
+    """
+    # Stage 1: Cross-sectional regressions
+    betas = []
+    for date in data[date_col].unique():
+        subset = data[data[date_col] == date]
+        X = subset[x_cols]
+        y = subset[y_col]
+        model = OLS(y, add_constant(X)).fit()
+        betas.append(model.params)
+    
+    betas_df = pd.DataFrame(betas)
+    
+    # Stage 2: Time-series statistics
+    mean_beta = betas_df.mean()
+    
+    # Newey-West standard errors
+    T = len(betas_df)
+    lag = int(4 * (T / 100) ** (2/9))  # Automatic lag selection
+    se_nw = newey_west_se(betas_df, lag)
+    
+    t_stats = mean_beta / se_nw
+    p_values = 2 * (1 - stats.t.cdf(np.abs(t_stats), df=T-1))
+    
+    return FamaMacBethResult(
+        coefficients=mean_beta,
+        std_errors=se_nw,
+        t_statistics=t_stats,
+        p_values=p_values,
+        n_periods=T
+    )
+```
+
+### C.2 Huberman-Kandel Spanning Test
+
+```python
+def huberman_kandel_spanning_test(
+    test_asset: pd.Series,
+    benchmark_assets: pd.DataFrame
+) -> SpanningTestResult:
+    """
+    Test if benchmark assets span the test asset.
+    
+    H0: alpha = 0 AND sum(beta) = 1
+    
+    Uses GMM Wald test robust to non-normality.
+    """
+    # Regression: r_test = alpha + beta' * r_benchmark + epsilon
+    X = add_constant(benchmark_assets)
+    model = OLS(test_asset, X).fit(cov_type='HAC', 
+                                    cov_kwds={'maxlags': 6})
+    
+    # Extract estimates
+    alpha = model.params['const']
+    betas = model.params.drop('const')
+    sum_beta = betas.sum()
+    
+    # Construct restriction vector: [alpha, sum(beta) - 1]
+    R = np.zeros((2, len(model.params)))
+    R[0, 0] = 1  # alpha = 0
+    R[1, 1:] = 1  # sum(beta) = 1
+    
+    r = np.array([0, 1])  # Restriction values
+    
+    # Wald statistic
+    theta = model.params.values
+    V = model.cov_params().values
+    
+    diff = R @ theta - r
+    wald_stat = diff.T @ np.linalg.inv(R @ V @ R.T) @ diff
+    
+    p_value = 1 - stats.chi2.cdf(wald_stat, df=2)
+    
+    return SpanningTestResult(
+        wald_statistic=wald_stat,
+        p_value=p_value,
+        alpha=alpha,
+        sum_beta=sum_beta,
+        reject_h0=(p_value < 0.05)
+    )
+```
+
+### C.3 Ledoit-Wolf Sharpe Ratio Test
+
+```python
+def ledoit_wolf_sharpe_test(
+    returns_1: pd.Series,
+    returns_2: pd.Series
+) -> SharpeComparisonResult:
+    """
+    Test for difference in Sharpe ratios using Ledoit-Wolf (2008).
+    
+    H0: SR_1 = SR_2
+    """
+    # Compute Sharpe ratios
+    sr1 = returns_1.mean() / returns_1.std() * np.sqrt(12)
+    sr2 = returns_2.mean() / returns_2.std() * np.sqrt(12)
+    
+    # Compute HAC standard error of difference
+    diff = returns_1 - returns_2
+    
+    # ... [detailed implementation]
+    
+    return SharpeComparisonResult(
+        sr_1=sr1,
+        sr_2=sr2,
+        difference=sr1 - sr2,
+        std_error=se_diff,
+        t_statistic=(sr1 - sr2) / se_diff,
+        p_value=p_val
+    )
+```
+
+---
+
+## Appendix D: Expected Results Benchmarks
+
+Based on the literature (Koijen et al. 2018, Baltas 2017), expected results for corporate bonds:
+
+| Metric | Expected Range | Source |
+|--------|---------------|--------|
+| XS Carry Sharpe | 0.3 - 0.6 | Extrapolated from govt bonds (0.44-0.85) |
+| TS Carry Sharpe | 0.3 - 0.7 | Extrapolated from govt bonds (0.88) |
+| Carry t-stat | > 2.0 | Koijen et al. Table results |
+| Strategy skewness | -0.3 to -0.7 | Similar to FX carry |
+| Correlation XS/TS | 0.5 - 0.7 | Baltas Table 8 |
+| Skewness enhancement | +0.05 to +0.15 SR | Baltas & Salinas results |
+
+**Important**: Corporate bonds are less studied than other asset classes. Results may differ significantly from government bonds due to:
+- Higher transaction costs
+- Lower liquidity
+- Credit event risk
+- Smaller universe
+
+These benchmarks are guides, not requirements. The GO/NO-GO criteria are set conservatively to account for estimation uncertainty.

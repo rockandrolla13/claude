@@ -1,0 +1,102 @@
+This document acts as a comprehensive Product Requirements Document (PRD) for the implementation of a systematic Corporate Bond Carry Strategy. It synthesizes the methodologies from Koijen et al. (2018), Baltas (2017), and Baltas & Salinas (2019), adapted for your specific constraints (Z-Spread input, high-frequency execution capabilities).
+Product Requirements Document (PRD): Corporate Bond Carry & Skew Strategy
+Version: 1.0Asset Class: US Investment Grade (IG) Corporate BondsStrategy Style: Systematic Global Macro / Fixed Income Risk PremiaExecution Frequency: Dynamic/Threshold-based (Daily Monitoring)
+1. Executive Summary
+The objective is to build an algorithmic trading system that harvests the Carry Premium in corporate bonds while filtering for Crash Risk (Skewness). Unlike traditional monthly-rebalanced strategies, this system utilizes an "Optimized" (OPT) signal construction that simultaneously captures Cross-Sectional (relative value) and Time-Series (directional) carry, normalized by volatility. It employs a dynamic execution engine that rebalances only when the expected alpha gain exceeds transaction costs, exploiting superior execution capabilities.
+2. Theoretical Framework & Mathematical Specifications
+2.1. The "Smart" Carry Signal ($S_{carry}$)
+We define Carry not merely as yield, but as a risk-adjusted expected return. Given the user constraint of using Z-Spread, we adapt the Koijen/Baltas definition.
+Formula 2.1: Net Expected Carry$$ C_{i,t} = \underbrace{Z_{i,t}}{\text{Credit Premium}} + \underbrace{\text{Roll}{i,t}}{\text{Curve Premium}} - \underbrace{(r{f,t} \times D_{i,t})}_{\text{Funding Cost}} $$
+$Z_{i,t}$: Z-Spread (in decimal, e.g., 0.0150) at time $t$.
+$\text{Roll}_{i,t}$: Rolldown return, approximated as $-D_{i,t} \times (Y_{i,t} - Y_{i,t}^{matched\_maturity})$. If explicit curve data is missing, this term defaults to 0 (conservative).
+$r_{f,t}$: Financing rate (e.g., SOFR or Repo Rate).
+$D_{i,t}$: Modified Duration.
+Formula 2.2: Volatility-Scaled Signal (The "OPT" Core)To integrate Time-Series and Cross-Sectional logic, we normalize raw carry by ex-ante volatility.$$ S_{carry, i, t} = \frac{C_{i,t}}{\sigma_{i,t}} $$
+$\sigma_{i,t}$: 3-month (63-day) rolling annualized volatility of bond $i$ daily price returns.
+2.2. The Skewness Filter ($S_{skew}$)
+We incorporate the "Cross-Asset Skew" finding (Baltas & Salinas, 2019) that assets with negative skewness command a higher risk premium.
+Formula 2.3: Realized Skewness$$ \text{Skew}{i,t} = \frac{1}{L} \sum{d=1}^{L} \left( \frac{r_{i,d} - \bar{\mu}_i}{\hat{\sigma}_i} \right)^3 $$
+$L$: Lookback window (252 trading days / 12 months).
+$r_{i,d}$: Daily total return of bond $i$.
+Formula 2.4: Skew Signal DirectionSince negative skewness predicts positive excess returns:$$ S_{skew, i, t} = -1 \times \text{Skew}_{i,t} $$
+2.3. Composite Signal Construction
+We combine the signals using a weighted Z-score approach to create the final allocation scalar.
+$$ S_{final, i, t} = \beta_{1} \cdot z(S_{carry, i, t}) + \beta_{2} \cdot z(S_{skew, i, t}) $$
+$z(\cdot)$: Cross-sectional Z-score standardization at time $t$.
+$\beta$ parameters: Recommended $\beta_1=0.7$ (Carry), $\beta_2=0.3$ (Skew).
+3. Data Architecture & Universe Construction
+3.1. Universe Definition
+Filter 1 (Liquidity): Amount Outstanding $> \$500M$ USD.
+Filter 2 (Maturity): Time to Maturity $> 1.5$ years (avoids distressed/pull-to-par noise).
+Filter 3 (Rating): IG Only (BBB-/Baa3 and above). Exclude distressed.
+Filter 4 (Type): Exclude Floating Rate Notes (FRN), Convertibles, and Callable bonds with <1yr to call.
+3.2. Data Ingestion Pipeline
+Data Point,Frequency,Source Mapping,Transformation
+Bond Price,Daily,clean_price,Compute daily % return
+Z-Spread,Daily,z_spread_bp,"Divide by 10,000"
+Mod Duration,Daily,mod_dur,None
+Funding Rate,Daily,sofr_rate,Annualized decimal
+Accrued Int,Daily,accrued_int,For total return calc
+4. Execution Engine: High-Frequency Threshold Logic
+Instead of monthly rebalancing, we use a continuous "Buffer Zone" logic to minimize turnover costs while capturing signal shifts.
+4.1. Target Weight Calculation ($w^*$)
+Using the Risk Budgeting approach (Baltas, 2017):$$ w^*{i,t} = k_t \cdot \frac{S{final, i, t}}{\sigma_{i,t}} $$
+$k_t$: Leverage scaler to target portfolio volatility (e.g., 5% annualized).
+Weights are Gross Constraints: $\sum |w_i| = \text{Leverage Limit}$.
+4.2. Transaction Cost Model (TCM)
+For every bond $i$, estimate the cost to trade:$$ \text{Cost}_i = \text{BidAskSpread}_i \times \text{LiquidityPenalty}_i $$
+LiquidityPenalty increases for older bonds (Age > 2 years).
+4.3. The Rebalancing Trigger (The "No-Trade Zone")
+For every bond $i$ at time $t$:
+Current Weight: $w_{curr, i}$
+Target Weight: $w^*_{i}$
+Alpha Gain: $\Delta \alpha = (w^*i - w{curr, i}) \times C_{i,t}$ (Expected carry gain)
+Trade Cost: $TC = |w^*i - w{curr, i}| \times \text{Cost}_i$
+Execution Logic:
+IF (Delta_Alpha > TC * Risk_Aversion_Parameter):
+    Execute Trade to move w_curr to w*
+ELSE:
+    Do Nothing (Hold current position)
+This ensures we only trade when the signal strength ($S_{carry} + S_{skew}$) justifies paying the bid-ask spread.
+5. Implementation Step-by-Step Plan
+Phase 1: Data ETL & Signal Engineering
+Cleaner: Ingest raw bond data. Apply filters (Universe Definition). Handle missing data (forward fill max 5 days, else drop).
+Calculator:
+Compute Daily Returns: $r_t = \frac{P_t + AI_t + C_t}{P_{t-1} + AI_{t-1}} - 1$
+Compute Rolling Volatility (63-day).
+Compute Skewness (252-day).
+Compute Net Carry ($Z - r_f \times D$).
+Normalizer: Compute Cross-Sectional Z-Scores for Carry and Skew.
+Phase 2: Portfolio Optimizer
+Signal Mixer: Combine Z-scores into Final_Signal.
+Target Generator: Calculate unconstrained target weights using Inverse Volatility $\times$ Signal.
+Scaler: Apply portfolio-level Volatility Targeting (e.g., scale weights so Portfolio Ex-Ante Vol = 5%).
+Phase 3: The Execution Simulator (Backtester)
+State Machine: Track current portfolio holdings vs. target holdings daily.
+Cost Check: Apply the logic from Section 4.3.
+Turnover Tracker: Record specific turnover. High-turnover strategies must demonstrate significantly higher Sharpe to verify the "execution edge."
+6. Implementation Prompts (For Coding Assistant)
+You can copy and paste these prompts sequentially to an AI coding assistant to build the system.
+Prompt 1: Universe & Data Class
+"Create a Python class BondUniverse using Pandas. It should load a CSV of bond data. Implement a method filter_universe() that removes bonds with Amount Outstanding < 250M, Maturity < 1.5 years, and Rating < BBB-. Ensure dates are converted to datetime objects and yields/spreads are converted to decimals."
+Prompt 2: Signal Generation
+"Create a class SignalEngine. It needs methods to calculate:
+rolling_volatility(returns, window=63)
+realized_skewness(returns, window=252)
+net_carry(z_spread, duration, funding_rate)
+composite_score(carry, skew, vol, w_carry=0.7, w_skew=0.3)The composite score should normalize carry by volatility first ($Carry / Vol$), then z-score both signals cross-sectionally before combining. Skewness should be negated."
+Prompt 3: Optimization Logic
+"Implement a function calculate_target_weights(df) where df contains the composite scores and volatility for all valid bonds on a specific date. Use a Risk Budgeting approach where weight is proportional to Score / Volatility. Normalize weights so the total gross exposure equals 1.0 (100%)."
+Prompt 4: Dynamic Rebalancing Engine (Crucial)
+"Build a backtest loop class RebalanceEngine. It should iterate through daily data. It maintains a current_weights vector. On each day:
+Calculate target_weights.
+Calculate trade_deviation = target - current.
+Implement a 'Threshold' logic: Only update current_weights for a specific bond if abs(trade_deviation) > 0.05 (5% buffer).
+Calculate daily returns based on the held weights (not the target weights).
+Output a timeseries of Portfolio Value, Turnover, and Number of Trades."
+7. Validation Checklist (QA)
+Before deploying capital, the strategy must pass these statistical tests:
+The Skewness Check: Does the portfolio have a positive loading to negative skewness? (i.e., do we successfully avoid bonds that crashed?)
+The Breakeven Test: Calculate the "Breakeven Holding Period" for the average trade. If the strategy trades every 5 days but requires 40 days of carry to pay the spread, the logic is flawed.
+Span Test: Regress strategy returns against standard credit factors (Duration, Credit Spreads). The Alpha ($\alpha$) must be statistically significant ($t > 2.0$), proving the Carry/Skew signals add value beyond passive beta.
+
